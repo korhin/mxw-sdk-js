@@ -6,23 +6,14 @@ import * as errors from '../errors';
 export type Network = {
     name: string,
     chainId: number,
-    ensAddress?: string,
     _defaultProvider?: (providers: any) => any
 }
 
 export type Networkish = Network | string | number;
 
-function ethDefaultProvider(network: string): (providers: any) => any {
+function mxwDefaultProvider(network: string): (providers: any) => any {
     return function(providers: any): any {
         let providerList: Array<any> = [];
-
-        if (providers.InfuraProvider) {
-            providerList.push(new providers.InfuraProvider(network));
-        }
-
-        if (providers.EtherscanProvider) {
-            providerList.push(new providers.EtherscanProvider(network));
-        }
 
         if (providerList.length === 0) { return null; }
 
@@ -34,28 +25,16 @@ function ethDefaultProvider(network: string): (providers: any) => any {
     }
 }
 
-function etcDefaultProvider(url: string, network: string): (providers: any) => any {
-    return function(providers: any): any {
-        if (providers.JsonRpcProvider) {
-            return new providers.JsonRpcProvider(url, network);
-        }
-
-        return null;
-    }
-}
-
 const homestead: Network = {
     chainId: 1,
-    ensAddress: "0x314159265dd8dbb310642f98f50c066173c1259b",
     name: "homestead",
-    _defaultProvider: ethDefaultProvider('homestead')
+    _defaultProvider: mxwDefaultProvider('homestead')
 };
 
-const ropsten: Network = {
-    chainId: 3,
-    ensAddress: "0x112234455c3a32fd11230c42e7bccd4a84e02010",
-    name: "ropsten",
-    _defaultProvider: ethDefaultProvider('ropsten')
+const twinturbocharge: Network = {
+    chainId: 317,
+    name: "twinturbocharge",
+    _defaultProvider: mxwDefaultProvider('twinturbocharge')
 };
 
 const networks: { [name: string]: Network } = {
@@ -67,50 +46,8 @@ const networks: { [name: string]: Network } = {
     homestead: homestead,
     mainnet: homestead,
 
-    morden: {
-        chainId: 2,
-        name: 'morden'
-    },
-
-    ropsten: ropsten,
-    testnet: ropsten,
-
-    rinkeby: {
-        chainId: 4,
-        ensAddress: "0xe7410170f87102DF0055eB195163A03B7F2Bff4A",
-        name: 'rinkeby',
-        _defaultProvider: ethDefaultProvider('rinkeby')
-    },
-
-    goerli: {
-        chainId: 5,
-        ensAddress: "0x112234455c3a32fd11230c42e7bccd4a84e02010",
-        name: "goerli",
-        _defaultProvider: (providers: any): any => {
-            if (providers.EtherscanProvider) {
-                return new providers.EtherscanProvider("goerli");
-            }
-            return null;
-        }
-    },
-
-    kovan: {
-        chainId: 42,
-        name: 'kovan',
-        _defaultProvider: ethDefaultProvider('kovan')
-    },
-
-    classic: {
-        chainId: 61,
-        name: 'classic',
-        _defaultProvider: etcDefaultProvider('https://web3.gastracker.io', 'classic')
-    },
-
-    classicTestnet: {
-        chainId: 62,
-        name: 'classicTestnet',
-        _defaultProvider: etcDefaultProvider('https://web3.gastracker.io/morden', 'classicTestnet')
-    }
+    twinturbocharge: twinturbocharge,
+    testnet: twinturbocharge
 }
 
 /**
@@ -130,7 +67,6 @@ export function getNetwork(network: Networkish): Network {
                 return {
                     name: n.name,
                     chainId: n.chainId,
-                    ensAddress: (n.ensAddress || null),
                     _defaultProvider: (n._defaultProvider || null)
                 };
             }
@@ -148,7 +84,6 @@ export function getNetwork(network: Networkish): Network {
         return {
             name: n.name,
             chainId: n.chainId,
-            ensAddress: n.ensAddress,
             _defaultProvider: (n._defaultProvider || null)
         };
     }
@@ -172,7 +107,6 @@ export function getNetwork(network: Networkish): Network {
     return {
         name: network.name,
         chainId: n.chainId,
-        ensAddress: (network.ensAddress || n.ensAddress || null),
         _defaultProvider: (network._defaultProvider || n._defaultProvider || null)
     };
 }

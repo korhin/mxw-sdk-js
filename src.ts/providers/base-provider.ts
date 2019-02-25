@@ -1,14 +1,12 @@
 'use strict';
 
-import { getAddress, getContractAddress } from '../utils/address';
+import { getAddress } from '../utils/address';
 import { BigNumber, bigNumberify } from '../utils/bignumber';
-import { hexDataLength, hexDataSlice, hexlify, hexStripZeros, isHexString, stripZeros } from '../utils/bytes';
-import { namehash } from '../utils/hash';
+import { hexDataLength, hexlify, hexStripZeros, isHexString, stripZeros } from '../utils/bytes';
 import { getNetwork } from '../utils/networks';
 import { defineReadOnly, inheritable, resolveProperties, shallowCopy } from '../utils/properties';
 import { encode as rlpEncode } from '../utils/rlp';
 import { parse as parseTransaction } from '../utils/transaction';
-import { toUtf8String } from '../utils/utf8';
 import { poll } from '../utils/web';
 
 import * as errors from '../errors';
@@ -23,9 +21,10 @@ import { Provider } from './abstract-provider';
 
 import {
     Block, BlockTag,
-    EventType, Filter, FilterByBlock,
+    EventType,
     Listener,
-    Log,
+    BlockId, BlockHeader,
+    AccountState,
     TransactionReceipt, TransactionRequest, TransactionResponse
 } from './abstract-provider';
 
@@ -35,6 +34,144 @@ import { Network, Networkish } from '../utils/networks';
 
 //////////////////////////////
 // Request and Response Checking
+
+const formatAccountState = {
+    type: checkString,
+    value: checkAny
+};
+
+// const formatAccountState = {
+//     type: checkString,
+//     value: {
+//         address: checkAddress,
+//         coins: [
+//             {
+//                 denom: checkString,
+//                 amount: checkNumber
+//             }
+//         ],
+//         public_key: {
+//             type: checkString,
+//             value: checkString
+//         },
+//         account_number: checkNumber,
+//         sequence: checkNumber
+//     }
+// };
+
+const formatStatus = {
+    node_info: {
+        protocol_version: {
+            p2p: checkNumber,
+            block: checkNumber,
+            app: checkNumber
+        },
+        id: checkHex,
+        listen_addr: checkString,
+        network: checkString,
+        version: checkString,
+        channels: checkNumber,
+        moniker: checkString,
+        other: {
+            tx_index: checkString,
+            rpc_address: checkString
+        }
+    },
+    sync_info: {
+        latest_block_hash: checkHash,
+        latest_app_hash: checkHash,
+        latest_block_height: checkNumber,
+        latest_block_time: checkTimestamp,
+        catching_up: checkBoolean
+    },
+    validator_info: {
+        address: checkHexAddress,
+        pub_key: {
+            type: checkString,
+            value: checkString
+        },
+        voting_power: checkNumber
+    }
+};
+
+const formatBlock = {
+    block_meta: {
+        block_id: checkBlockId,
+        header: checkBlockHeader
+    },
+    block: {
+        header: checkBlockHeader,
+        data: {
+            txs: allowNull(checkAny)
+        },
+        evidence: {
+            evidence: allowNull(checkAny)
+        },
+        last_commit: {
+            block_id: checkBlockId,
+            precommits: arrayOf(checkPreCommit)
+        }
+    }
+};
+
+const formatPreCommit = {
+    type: checkNumber,
+    height: checkNumber,
+    round: checkNumber,
+    timestamp: checkTimestamp,
+    block_id: checkBlockId,
+    validator_address: checkHexAddress,
+    validator_index: checkNumber,
+    signature: checkString
+}
+
+function checkPreCommit(preCommit: any): Block {
+    return check(formatPreCommit, preCommit);
+}
+
+const formatBlockId = {
+    hash: checkHash,
+    parts: {
+        total: checkNumber,
+        hash: checkHash
+    }
+}
+
+function checkBlockId(data: any): BlockId {
+    return check(formatBlockId, data);
+}
+
+const formatBlockHeader = {
+    version: {
+        block: checkNumber,
+        app: checkNumber
+    },
+    chain_id: checkString,
+    height: checkNumber,
+    time: checkTimestamp,
+    num_txs: checkNumber,
+    total_txs: checkNumber,
+    last_block_id: {
+        hash: checkHash,
+        parts: {
+            total: checkNumber,
+            hash: checkHash
+        }
+    },
+    last_commit_hash: checkHash,
+    data_hash: allowNullOrEmpty(checkHash),
+    validators_hash: checkHash,
+    next_validators_hash: checkHash,
+    consensus_hash: checkHash,
+    app_hash: checkHash,
+    last_results_hash: allowNullOrEmpty(checkHash),
+    evidence_hash: allowNullOrEmpty(checkHash),
+    proposer_address: checkHexAddress
+}
+
+function checkBlockHeader(data: any): BlockHeader {
+    return check(formatBlockHeader, data);
+}
 
 // @TODO: not any?
 function check(format: any, object: any): any {
@@ -55,26 +192,33 @@ function check(format: any, object: any): any {
 type CheckFunc = (value: any) => any;
 
 function allowNull(check: CheckFunc, nullValue?: any): CheckFunc {
-    return (function(value: any) {
+    return (function (value: any) {
         if (value == null) { return nullValue; }
         return check(value);
     });
 }
 
-function allowFalsish(check: CheckFunc, replaceValue: any): CheckFunc {
-    return (function(value) {
-        if (!value) { return replaceValue; }
+// function allowFalsish(check: CheckFunc, replaceValue: any): CheckFunc {
+//     return (function (value) {
+//         if (!value) { return replaceValue; }
+//         return check(value);
+//     });
+// }
+
+function allowNullOrEmpty(check: CheckFunc, nullValue?: any): CheckFunc {
+    return (function (value: any) {
+        if (value == null || '' === value) { return nullValue; }
         return check(value);
     });
 }
 
 function arrayOf(check: CheckFunc): CheckFunc {
-    return (function(array: any): Array<any> {
+    return (function (array: any): Array<any> {
         if (!Array.isArray(array)) { throw new Error('not an array'); }
 
         let result: any = [];
 
-        array.forEach(function(value) {
+        array.forEach(function (value) {
             result.push(check(value));
         });
 
@@ -83,11 +227,11 @@ function arrayOf(check: CheckFunc): CheckFunc {
 }
 
 function checkHash(hash: any, requirePrefix?: boolean): string {
-    if (typeof(hash) === 'string') {
+    if (typeof (hash) === 'string') {
         // geth-etc does add a "0x" prefix on receipt.root
         if (!requirePrefix && hash.substring(0, 2) !== '0x') { hash = '0x' + hash; }
         if (hexDataLength(hash) === 32) {
-           return hash.toLowerCase();
+            return hash.toLowerCase();
         }
     }
     errors.throwError('invalid hash', errors.INVALID_ARGUMENT, { arg: 'hash', value: hash });
@@ -98,20 +242,20 @@ function checkNumber(number: any): number {
     return bigNumberify(number).toNumber();
 }
 
-// Returns the difficulty as a number, or if too large (i.e. PoA network) null
-function checkDifficulty(value: BigNumberish): number {
-    let v = bigNumberify(value);
+// // Returns the difficulty as a number, or if too large (i.e. PoA network) null
+// function checkDifficulty(value: BigNumberish): number {
+//     let v = bigNumberify(value);
 
-    try {
-        return v.toNumber();
-    } catch (error) { }
+//     try {
+//         return v.toNumber();
+//     } catch (error) { }
 
-    return null;
-}
+//     return null;
+// }
 
 function checkBoolean(value: any): boolean {
-    if (typeof(value) === 'boolean') { return value; }
-    if (typeof(value) === 'string') {
+    if (typeof (value) === 'boolean') { return value; }
+    if (typeof (value) === 'string') {
         if (value === 'true') { return true; }
         if (value === 'false') { return false; }
     }
@@ -128,56 +272,83 @@ function checkUint256(uint256: string): string {
     return uint256;
 }
 
-/*
-function checkString(string) {
-    if (typeof(string) !== 'string') { throw new Error('invalid string'); }
+function checkString(string: any): string {
+    if (typeof (string) !== 'string') { throw new Error('invalid string'); }
     return string;
 }
-*/
+
+function checkTimestamp(string: string) {
+    if (typeof (string) !== 'string') { throw new Error('invalid timestanmp'); }
+    return string;
+}
+
+function checkAddress(string: string) {
+    if (typeof (string) !== 'string') { throw new Error('invalid address'); }
+    return string;
+}
+
+function checkHex(string: string) {
+    if (typeof (string) !== 'string' || !isHexString(string)) { throw new Error('invalid hex address'); }
+    return string;
+}
+
+function checkHexAddress(string: string) {
+    if (typeof (string) !== 'string') { throw new Error('invalid hex address'); }
+    return string;
+}
+
+function checkAny(value: any) {
+    return value;
+}
 
 function checkBlockTag(blockTag: BlockTag): string {
-    if (blockTag == null) { return 'latest'; }
+    if (blockTag == null) { return '0'; }
 
-    if (blockTag === 'earliest') { return '0x0'; }
+    if (blockTag === 'earliest') { return '0'; }
 
     if (blockTag === 'latest' || blockTag === 'pending') {
-        return blockTag;
+        return "0";
     }
 
-    if (typeof(blockTag) === 'number') {
-        return hexStripZeros(hexlify(blockTag));
-    }
+    if (isHexString(blockTag)) { return bigNumberify(blockTag).toString(); }
 
-    if (isHexString(blockTag)) { return hexStripZeros(blockTag); }
+    try {
+        if ('string' === typeof blockTag)
+            return parseInt(blockTag).toString();
+
+        return blockTag.toString();
+    }
+    catch (error) {
+    }
 
     throw new Error('invalid blockTag');
 }
 
 const formatTransaction = {
-   hash: checkHash,
+    hash: checkHash,
 
-   blockHash: allowNull(checkHash, null),
-   blockNumber: allowNull(checkNumber, null),
-   transactionIndex: allowNull(checkNumber, null),
+    blockHash: allowNull(checkHash, null),
+    blockNumber: allowNull(checkNumber, null),
+    transactionIndex: allowNull(checkNumber, null),
 
-   confirmations: allowNull(checkNumber, null),
+    confirmations: allowNull(checkNumber, null),
 
-   from: getAddress,
+    from: getAddress,
 
-   gasPrice: bigNumberify,
-   gasLimit: bigNumberify,
-   to: allowNull(getAddress, null),
-   value: bigNumberify,
-   nonce: checkNumber,
-   data: hexlify,
+    gasPrice: bigNumberify,
+    gasLimit: bigNumberify,
+    to: allowNull(getAddress, null),
+    value: bigNumberify,
+    nonce: checkNumber,
+    data: hexlify,
 
-   r: allowNull(checkUint256),
-   s: allowNull(checkUint256),
-   v: allowNull(checkNumber),
+    r: allowNull(checkUint256),
+    s: allowNull(checkUint256),
+    v: allowNull(checkNumber),
 
-   creates: allowNull(getAddress, null),
+    creates: allowNull(getAddress, null),
 
-   raw: allowNull(hexlify),
+    raw: allowNull(hexlify),
 };
 
 function checkTransactionResponse(transaction: any): TransactionResponse {
@@ -198,10 +369,10 @@ function checkTransactionResponse(transaction: any): TransactionResponse {
         transaction.data = transaction.input;
     }
 
-    // If to and creates are empty, populate the creates from the transaction
-    if (transaction.to == null && transaction.creates == null) {
-        transaction.creates = getContractAddress(transaction);
-    }
+    // // If to and creates are empty, populate the creates from the transaction
+    // if (transaction.to == null && transaction.creates == null) {
+    //     transaction.creates = getContractAddress(transaction);
+    // }
 
     // @TODO: use transaction.serialize? Have to add support for including v, r, and s...
     if (!transaction.raw) {
@@ -237,13 +408,13 @@ function checkTransactionResponse(transaction: any): TransactionResponse {
         networkId = bigNumberify(networkId).toNumber();
     }
 
-    if (typeof(networkId) !== 'number' && result.v != null) {
+    if (typeof (networkId) !== 'number' && result.v != null) {
         networkId = (result.v - 35) / 2;
         if (networkId < 0) { networkId = 0; }
         networkId = parseInt(networkId);
     }
 
-    if (typeof(networkId) !== 'number') { networkId = 0; }
+    if (typeof (networkId) !== 'number') { networkId = 0; }
 
     result.networkId = networkId;
 
@@ -255,24 +426,6 @@ function checkTransactionResponse(transaction: any): TransactionResponse {
     return result;
 }
 
-const formatBlock = {
-    hash: checkHash,
-    parentHash: checkHash,
-    number: checkNumber,
-
-    timestamp: checkNumber,
-    nonce: allowNull(hexlify),
-    difficulty: checkDifficulty,
-
-    gasLimit: bigNumberify,
-    gasUsed: bigNumberify,
-
-    miner: getAddress,
-    extraData: hexlify,
-
-    transactions: allowNull(arrayOf(checkHash)),
-};
-
 const formatBlockWithTransactions = shallowCopy(formatBlock);
 formatBlockWithTransactions.transactions = allowNull(arrayOf(checkTransactionResponse));
 
@@ -280,7 +433,7 @@ function checkBlock(block: any, includeTransactions: boolean): Block {
     if (block.author != null && block.miner == null) {
         block.miner = block.author;
     }
-    return check(includeTransactions ? formatBlockWithTransactions: formatBlock, block);
+    return check(includeTransactions ? formatBlockWithTransactions : formatBlock, block);
 }
 
 const formatTransactionRequest = {
@@ -335,68 +488,7 @@ function checkTransactionReceipt(transactionReceipt: any): TransactionReceipt {
     //var root = transactionReceipt.root;
 
     let result: TransactionReceipt = check(formatTransactionReceipt, transactionReceipt);
-    result.logs.forEach(function(entry, index) {
-        if (entry.transactionLogIndex == null) {
-            entry.transactionLogIndex = index;
-        }
-    });
-    if (transactionReceipt.status != null) {
-        result.byzantium = true;
-    }
     return result;
-}
-
-function checkTopics(topics: any): any {
-    if (Array.isArray(topics)) {
-        topics.forEach(function(topic) {
-            checkTopics(topic);
-        });
-
-    } else if (topics != null) {
-        checkHash(topics);
-    }
-
-    return topics;
-}
-
-const formatFilter = {
-    fromBlock: allowNull(checkBlockTag, undefined),
-    toBlock: allowNull(checkBlockTag, undefined),
-    address: allowNull(getAddress, undefined),
-    topics: allowNull(checkTopics, undefined),
-};
-
-const formatFilterByBlock = {
-    blockHash: allowNull(checkHash, undefined),
-    address: allowNull(getAddress, undefined),
-    topics: allowNull(checkTopics, undefined),
-};
-
-function checkFilter(filter: any): any {
-    if (filter && filter.blockHash) {
-        return check(formatFilterByBlock, filter);
-    }
-    return check(formatFilter, filter);
-}
-
-const formatLog = {
-    blockNumber: allowNull(checkNumber),
-    blockHash: allowNull(checkHash),
-    transactionIndex: checkNumber,
-
-    removed: allowNull(checkBoolean),
-
-    address: getAddress,
-    data: allowFalsish(hexlify, '0x'),
-
-    topics: arrayOf(checkHash),
-
-    transactionHash: checkHash,
-    logIndex: checkNumber,
-}
-
-function checkLog(log: any): any {
-    return check(formatLog, log);
 }
 
 
@@ -405,7 +497,7 @@ function checkLog(log: any): any {
 
 function serializeTopics(topics: Array<string | Array<string>>): string {
     return topics.map((topic) => {
-        if (typeof(topic) === 'string') {
+        if (typeof (topic) === 'string') {
             return topic;
         } else if (Array.isArray(topic)) {
             topic.forEach((topic) => {
@@ -421,23 +513,23 @@ function serializeTopics(topics: Array<string | Array<string>>): string {
     }).join('&');
 }
 
-function deserializeTopics(data: string): Array<string | Array<string>> {
-    return data.split(/&/g).map((topic) => {
-        let comps = topic.split(',');
-        if (comps.length === 1) {
-            if (comps[0] === '') { return null; }
-            return topic;
-        }
+// function deserializeTopics(data: string): Array<string | Array<string>> {
+//     return data.split(/&/g).map((topic) => {
+//         let comps = topic.split(',');
+//         if (comps.length === 1) {
+//             if (comps[0] === '') { return null; }
+//             return topic;
+//         }
 
-        return comps.map((topic) => {
-            if (topic === '') { return null; }
-            return topic;
-        });
-    });
-}
+//         return comps.map((topic) => {
+//             if (topic === '') { return null; }
+//             return topic;
+//         });
+//     });
+// }
 
 function getEventTag(eventName: EventType): string {
-    if (typeof(eventName) === 'string') {
+    if (typeof (eventName) === 'string') {
         if (hexDataLength(eventName) === 20) {
             return 'address:' + getAddress(eventName);
         }
@@ -455,7 +547,7 @@ function getEventTag(eventName: EventType): string {
     } else if (Array.isArray(eventName)) {
         return 'filter::' + serializeTopics(eventName);
 
-    } else if (eventName && typeof(eventName) === 'object') {
+    } else if (eventName && typeof (eventName) === 'object') {
         return 'filter:' + (eventName.address || '') + ':' + serializeTopics(eventName.topics || []);
     }
 
@@ -505,7 +597,7 @@ export class BaseProvider extends Provider {
     //   - t:{hash}    - Transaction hash
     //   - b:{hash}    - BlockHash
     //   - block       - The most recent emitted block
-    protected _emitted: { [ eventName: string ]: number | 'pending' };
+    protected _emitted: { [eventName: string]: number | 'pending' };
 
     private _pollingInterval: number;
     private _poller: any; // @TODO: what does TypeScript think setInterval returns?
@@ -545,7 +637,7 @@ export class BaseProvider extends Provider {
             this.ready.catch((error) => { });
 
         } else {
-            let knownNetwork = getNetwork((network == null) ? 'homestead': network);
+            let knownNetwork = getNetwork((network == null) ? 'homestead' : network);
             if (knownNetwork) {
                 defineReadOnly(this, '_network', knownNetwork);
                 defineReadOnly(this, 'ready', Promise.resolve(this._network));
@@ -620,7 +712,7 @@ export class BaseProvider extends Provider {
             let newBalances: any = {};
 
             // Find all transaction hashes we are waiting on
-            let uniqueEventTags: { [ tag: string ]: boolean } = { };
+            let uniqueEventTags: { [tag: string]: boolean } = {};
             this._events.forEach((event) => {
                 uniqueEventTags[event.tag] = true;
             });
@@ -654,27 +746,6 @@ export class BaseProvider extends Provider {
                             return null;
                         }).catch((error: Error) => { this.emit('error', error); });
 
-                        break;
-                    }
-
-                    case 'filter': {
-                        let topics = deserializeTopics(comps[2]);
-                        let filter = {
-                            address: comps[1],
-                            fromBlock: this._lastBlockNumber + 1,
-                            toBlock: blockNumber,
-                            topics: topics
-                        }
-                        if (!filter.address) { delete filter.address; }
-                        this.getLogs(filter).then((logs) => {
-                            if (logs.length === 0) { return; }
-                            logs.forEach((log: Log) => {
-                                this._emitted['b:' + log.blockHash] = log.blockNumber;
-                                this._emitted['t:' + log.transactionHash] = log.blockNumber;
-                                this.emit(filter, log);
-                            });
-                            return null;
-                        }).catch((error: Error) => { this.emit('error', error); });
                         break;
                     }
                 }
@@ -728,7 +799,7 @@ export class BaseProvider extends Provider {
     }
 
     set pollingInterval(value: number) {
-        if (typeof(value) !== 'number' || value <= 0 || parseInt(String(value)) != value) {
+        if (typeof (value) !== 'number' || value <= 0 || parseInt(String(value)) != value) {
             throw new Error('invalid polling interval');
         }
 
@@ -795,7 +866,7 @@ export class BaseProvider extends Provider {
 
     getBlockNumber(): Promise<number> {
         return this.ready.then(() => {
-            return this.perform('getBlockNumber', { }).then((result) => {
+            return this.perform('getBlockNumber', {}).then((result) => {
                 let value = parseInt(result);
                 if (value != result) { throw new Error('invalid response - getBlockNumber'); }
                 this._setFastBlockNumber(value);
@@ -806,35 +877,72 @@ export class BaseProvider extends Provider {
 
     getGasPrice(): Promise<BigNumber> {
         return this.ready.then(() => {
-            return this.perform('getGasPrice', { }).then((result) => {
+            return this.perform('getGasPrice', {}).then((result) => {
                 return bigNumberify(result);
             });
         });
     }
 
+    getStatus(): Promise<any> {
+        return this.ready.then(() => {
+            return this.perform('getStatus', {}).then((result) => {
+                return check(formatStatus, result);
+            });
+        });
+    }
 
-    getBalance(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber> {
+    getAccountState(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<AccountState> {
         return this.ready.then(() => {
             return resolveProperties({ addressOrName: addressOrName, blockTag: blockTag }).then(({ addressOrName, blockTag }) => {
                 return this.resolveName(addressOrName).then((address) => {
-                    let params = { address: address, blockTag: checkBlockTag(blockTag) };
-                    return this.perform('getBalance', params).then((result) => {
-                        return bigNumberify(result);
+                    let params = {
+                        address: address,
+                        blockTag: checkBlockTag(blockTag)
+                    };
+                    return this.perform('getAccountState', params).then((result) => {
+                        if (result)
+                            result = check(formatAccountState, result);
+                        return result;
                     });
                 });
             });
         });
     }
 
-    getTransactionCount(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<number> {
+    getAccountNumber(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber> {
         return this.ready.then(() => {
-            return resolveProperties({ addressOrName: addressOrName, blockTag: blockTag }).then(({ addressOrName, blockTag }) => {
-                return this.resolveName(addressOrName).then((address) => {
-                    let params = { address: address, blockTag: checkBlockTag(blockTag) };
-                    return this.perform('getTransactionCount', params).then((result) => {
-                        return bigNumberify(result).toNumber();
-                    });
-                });
+            return this.getAccountState(addressOrName, blockTag).then((result) => {
+                if (result && result.value && result.value.account_number) {
+                    return bigNumberify(result.value.account_number);
+                }
+                return bigNumberify(0);
+            });
+        });
+    }
+
+    getBalance(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber> {
+        return this.ready.then(() => {
+            return this.getAccountState(addressOrName, blockTag).then((result) => {
+                if (result && result.value && result.value.coins) {
+                    let coins = result.value.coins;
+                    if (0 < coins.length) {
+                        if (coins[0].amount) {
+                            return bigNumberify(coins[0].amount);
+                        }
+                    }
+                }
+                return bigNumberify(0);
+            });
+        });
+    }
+
+    getTransactionCount(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber> {
+        return this.ready.then(() => {
+            return this.getAccountState(addressOrName, blockTag).then((result) => {
+                if (result && result.value && result.value.sequence) {
+                    return bigNumberify(result.value.sequence);
+                }
+                return bigNumberify(0);
             });
         });
     }
@@ -843,7 +951,7 @@ export class BaseProvider extends Provider {
         return this.ready.then(() => {
             return resolveProperties({ addressOrName: addressOrName, blockTag: blockTag }).then(({ addressOrName, blockTag }) => {
                 return this.resolveName(addressOrName).then((address) => {
-                    let params = {address: address, blockTag: checkBlockTag(blockTag)};
+                    let params = { address: address, blockTag: checkBlockTag(blockTag) };
                     return this.perform('getCode', params).then((result) => {
                         return hexlify(result);
                     });
@@ -926,33 +1034,29 @@ export class BaseProvider extends Provider {
         return result;
     }
 
-
-    call(transaction: TransactionRequest, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> {
-        let tx: TransactionRequest = shallowCopy(transaction);
-        return this.ready.then(() => {
-            return resolveProperties({ blockTag: blockTag, tx: tx }).then(({ blockTag, tx }) => {
-                return this._resolveNames(tx, [ 'to', 'from' ]).then((tx) => {
-                    let params = { blockTag: checkBlockTag(blockTag), transaction: checkTransactionRequest(tx) };
-                    return this.perform('call', params).then((result) => {
-                        return hexlify(result);
-                    });
-                });
-            });
-        });
-    }
+    // call(transaction: TransactionRequest, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> {
+    //     let tx: TransactionRequest = shallowCopy(transaction);
+    //     return this.ready.then(() => {
+    //         return resolveProperties({ blockTag: blockTag, tx: tx }).then(({ blockTag, tx }) => {
+    //             return this._resolveNames(tx, ['to', 'from']).then((tx) => {
+    //                 let params = { blockTag: checkBlockTag(blockTag), transaction: checkTransactionRequest(tx) };
+    //                 return this.perform('call', params).then((result) => {
+    //                     return hexlify(result);
+    //                 });
+    //             });
+    //         });
+    //     });
+    // }
 
     estimateGas(transaction: TransactionRequest) {
+        // TODO
         let tx: TransactionRequest = {
-            to: transaction.to,
-            from: transaction.from,
-            data: transaction.data,
-            gasPrice: transaction.gasPrice,
-            value: transaction.value
+            from: transaction.from
         };
 
         return this.ready.then(() => {
             return resolveProperties(tx).then((tx) => {
-                return this._resolveNames(tx, [ 'to', 'from' ]).then((tx) => {
+                return this._resolveNames(tx, ['to', 'from']).then((tx) => {
                     let params = { transaction: checkTransactionRequest(tx) };
                     return this.perform('estimateGas', params).then((result) => {
                         return bigNumberify(result);
@@ -960,7 +1064,7 @@ export class BaseProvider extends Provider {
                 });
             });
         });
-   }
+    }
 
     getBlock(blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>, includeTransactions?: boolean): Promise<Block> {
         return this.ready.then(() => {
@@ -1086,22 +1190,9 @@ export class BaseProvider extends Provider {
         });
     }
 
-    getLogs(filter: Filter | FilterByBlock): Promise<Array<Log>> {
+    getPrice(): Promise<number> {
         return this.ready.then(() => {
-            return resolveProperties(filter).then((filter) => {
-                return this._resolveNames(filter, ['address']).then((filter) => {
-                    let params = { filter: checkFilter(filter) };
-                    return this.perform('getLogs', params).then((result) => {
-                        return arrayOf(checkLog)(result);
-                    });
-                });
-            });
-        });
-    }
-
-    getEtherPrice(): Promise<number> {
-        return this.ready.then(() => {
-            return this.perform('getEtherPrice', {}).then((result) => {
+            return this.perform('getPrice', {}).then((result) => {
                 // @TODO: Check valid float
                 return result;
             });
@@ -1112,9 +1203,9 @@ export class BaseProvider extends Provider {
     private _resolveNames(object: any, keys: Array<string>): Promise<{ [key: string]: string }> {
         let promises: Array<Promise<void>> = [];
 
-        let result: { [key: string ]: string } = shallowCopy(object);
+        let result: { [key: string]: string } = shallowCopy(object);
 
-        keys.forEach(function(key) {
+        keys.forEach(function (key) {
             if (result[key] == null) { return; }
             promises.push(this.resolveName(result[key]).then((address: string) => {
                 result[key] = address;
@@ -1122,33 +1213,7 @@ export class BaseProvider extends Provider {
             }));
         }, this);
 
-        return Promise.all(promises).then(function() { return result; });
-    }
-
-    private _getResolver(name: string): Promise<string> {
-        // Get the resolver from the blockchain
-        return this.getNetwork().then((network) => {
-
-            // No ENS...
-            if (!network.ensAddress) {
-                errors.throwError(
-                    'network does support ENS',
-                    errors.UNSUPPORTED_OPERATION,
-                    { operation: 'ENS', network: network.name }
-                );
-            }
-
-            // keccak256('resolver(bytes32)')
-            let data = '0x0178b8bf' + namehash(name).substring(2);
-            let transaction = { to: network.ensAddress, data: data };
-
-            return this.call(transaction).then((data) => {
-
-                // extract the address from the data
-                if (hexDataLength(data) !== 32) { return null; }
-                return getAddress(hexDataSlice(data, 12));
-            });
-        });
+        return Promise.all(promises).then(function () { return result; });
     }
 
     resolveName(name: string | Promise<string>): Promise<string> {
@@ -1165,24 +1230,10 @@ export class BaseProvider extends Provider {
             return Promise.resolve(getAddress(name));
         } catch (error) { }
 
-        let self = this;
-
-        let nodeHash = namehash(name);
-
-        // Get the addr from the resovler
-        return this._getResolver(name).then(function(resolverAddress) {
-
-            // keccak256('addr(bytes32)')
-            let data = '0x3b3b57de' + nodeHash.substring(2);
-            let transaction = { to: resolverAddress, data: data };
-            return self.call(transaction);
-
-        // extract the address from the data
-        }).then(function(data) {
-            if (hexDataLength(data) !== 32) { return null; }
-            let address = getAddress(hexDataSlice(data, 12));
-            if (address === '0x0000000000000000000000000000000000000000') { return null; }
-            return address;
+        return this.ready.then(() => {
+            return this.perform('resolveName', { name: name }).then((result) => {
+                return result;
+            });
         });
     }
 
@@ -1195,41 +1246,10 @@ export class BaseProvider extends Provider {
 
         address = getAddress(address);
 
-        let name = address.substring(2) + '.addr.reverse'
-        let nodehash = namehash(name);
-
-        let self = this;
-
-        return this._getResolver(name).then(function(resolverAddress) {
-            if (!resolverAddress) { return null; }
-
-            // keccak('name(bytes32)')
-            let data = '0x691f3431' + nodehash.substring(2);
-            let transaction = { to: resolverAddress, data: data };
-            return self.call(transaction);
-
-        }).then(function(data) {
-            // Strip off the "0x"
-            data = data.substring(2);
-
-            // Strip off the dynamic string pointer (0x20)
-            if (data.length < 64) { return null; }
-            data = data.substring(64);
-
-            if (data.length < 64) { return null; }
-            let length = bigNumberify('0x' + data.substring(0, 64)).toNumber();
-            data = data.substring(64);
-
-            if (2 * length > data.length) { return null; }
-
-            let name = toUtf8String('0x' + data.substring(0, 2 * length));
-
-            // Make sure the reverse record matches the foward record
-            return self.resolveName(name).then(function(addr) {
-                if (addr != address) { return null; }
-                return name;
+        return this.ready.then(() => {
+            return this.perform('lookupAddress', { address: address }).then((result) => {
+                return result;
             });
-
         });
     }
 
@@ -1279,17 +1299,17 @@ export class BaseProvider extends Provider {
     emit(eventName: EventType, ...args: Array<any>): boolean {
         let result = false;
 
-        let eventTag = getEventTag(eventName);
-        this._events = this._events.filter((event) => {
-            if (event.tag !== eventTag) { return true; }
-            setTimeout(() => {
-                event.listener.apply(this, args);
-            }, 0);
-            result = true;
-            return !(event.once);
-        });
+        // let eventTag = getEventTag(eventName);
+        // this._events = this._events.filter((event) => {
+        //     if (event.tag !== eventTag) { return true; }
+        //     setTimeout(() => {
+        //         event.listener.apply(this, args);
+        //     }, 0);
+        //     result = true;
+        //     return !(event.once);
+        // });
 
-        if (this.listenerCount() === 0) { this.polling = false; }
+        // if (this.listenerCount() === 0) { this.polling = false; }
 
         return result;
     }
@@ -1314,7 +1334,7 @@ export class BaseProvider extends Provider {
 
     removeAllListeners(eventName?: EventType): Provider {
         if (eventName == null) {
-            this._events = [ ];
+            this._events = [];
             this._stopPending();
         } else {
             let eventTag = getEventTag(eventName);

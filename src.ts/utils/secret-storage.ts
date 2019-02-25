@@ -10,7 +10,7 @@ import * as HDNode from './hdnode';
 import { getAddress } from './address';
 import { arrayify, concat, hexlify } from './bytes';
 import { pbkdf2 } from './pbkdf2';
-import { keccak256 } from './keccak256';
+import { sha256 } from './sha2';
 import { toUtf8Bytes, UnicodeNormalizationForm } from './utf8';
 import { randomBytes } from './random-bytes';
 
@@ -120,7 +120,7 @@ export function decryptCrowdsale(json: string, password: Arrayish | string): Sig
 
     var seedHexBytes = toUtf8Bytes(seedHex);
 
-    var signingKey = new SigningKey(keccak256(seedHexBytes));
+    var signingKey = new SigningKey(sha256(seedHexBytes));
 
     if (signingKey.address !== ethaddr) {
         throw new Error('corrupt crowdsale wallet');
@@ -150,7 +150,7 @@ export function decrypt(json: string, password: Arrayish, progressCallback?: Pro
     };
 
     var computeMAC = function(derivedHalf: Uint8Array, ciphertext: Uint8Array) {
-        return keccak256(concat([derivedHalf, ciphertext]));
+        return sha256(concat([derivedHalf, ciphertext]));
     }
 
     var getSigningKey = function(key: Uint8Array, reject: (error?: Error) => void) {
@@ -394,7 +394,7 @@ export function encrypt(privateKey: Arrayish | SigningKey, password: Arrayish | 
                 var ciphertext = arrayify(aesCtr.encrypt(privateKeyBytes));
 
                 // Compute the message authentication code, used to check the password
-                var mac = keccak256(concat([macPrefix, ciphertext]))
+                var mac = sha256(concat([macPrefix, ciphertext]))
 
                 // See: https://github.com/ethereum/wiki/wiki/Web3-Secret-Storage-Definition
                 var data: { [key: string]: any } = {

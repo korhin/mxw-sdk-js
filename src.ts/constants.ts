@@ -1,4 +1,8 @@
+'use strict';
+
 import { BigNumber, bigNumberify } from './utils/bignumber';
+
+const AddressPrefix = 'mxw';
 
 const AddressZero = '0x0000000000000000000000000000000000000000';
 const HashZero = '0x0000000000000000000000000000000000000000000000000000000000000000';
@@ -17,6 +21,8 @@ const WeiPerEther: BigNumber = bigNumberify('1000000000000000000');
 const MaxUint256: BigNumber = bigNumberify('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
 
 export {
+    AddressPrefix,
+
     AddressZero,
     HashZero,
 

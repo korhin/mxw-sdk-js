@@ -3,12 +3,9 @@ import { Zero } from '../constants';
 
 import * as errors from '../errors';
 
-import { recoverAddress } from './secp256k1';
-
 import { getAddress } from './address';
 import { BigNumber, bigNumberify } from './bignumber';
-import { arrayify, hexlify, hexZeroPad, splitSignature, stripZeros, } from './bytes';
-import { keccak256 } from './keccak256';
+import { arrayify, hexlify, splitSignature, stripZeros, } from './bytes';
 import { checkProperties, resolveProperties, shallowCopy } from './properties';
 
 import * as RLP from './rlp';
@@ -155,51 +152,51 @@ export function parse(rawTransaction: Arrayish): Transaction {
         chainId:  0
     };
 
-    // Legacy unsigned transaction
-    if (transaction.length === 6) { return tx; }
+    // // Legacy unsigned transaction
+    // if (transaction.length === 6) { return tx; }
 
-    try {
-        tx.v = bigNumberify(transaction[6]).toNumber();
+    // try {
+    //     tx.v = bigNumberify(transaction[6]).toNumber();
 
-    } catch (error) {
-        errors.info(error);
-        return tx;
-    }
+    // } catch (error) {
+    //     errors.info(error);
+    //     return tx;
+    // }
 
-    tx.r = hexZeroPad(transaction[7], 32);
-    tx.s = hexZeroPad(transaction[8], 32);
+    // tx.r = hexZeroPad(transaction[7], 32);
+    // tx.s = hexZeroPad(transaction[8], 32);
 
-    if (bigNumberify(tx.r).isZero() && bigNumberify(tx.s).isZero()) {
-        // EIP-155 unsigned transaction
-        tx.chainId = tx.v;
-        tx.v = 0;
+    // if (bigNumberify(tx.r).isZero() && bigNumberify(tx.s).isZero()) {
+    //     // EIP-155 unsigned transaction
+    //     tx.chainId = tx.v;
+    //     tx.v = 0;
 
-    } else {
-        // Signed Tranasaction
+    // } else {
+    //     // Signed Tranasaction
 
-        tx.chainId = Math.floor((tx.v - 35) / 2);
-        if (tx.chainId < 0) { tx.chainId = 0; }
+    //     tx.chainId = Math.floor((tx.v - 35) / 2);
+    //     if (tx.chainId < 0) { tx.chainId = 0; }
 
-        let recoveryParam = tx.v - 27;
+    //     let recoveryParam = tx.v - 27;
 
-        let raw = transaction.slice(0, 6);
+    //     let raw = transaction.slice(0, 6);
 
-        if (tx.chainId !== 0) {
-            raw.push(hexlify(tx.chainId));
-            raw.push('0x');
-            raw.push('0x');
-            recoveryParam -= tx.chainId * 2 + 8;
-        }
+    //     if (tx.chainId !== 0) {
+    //         raw.push(hexlify(tx.chainId));
+    //         raw.push('0x');
+    //         raw.push('0x');
+    //         recoveryParam -= tx.chainId * 2 + 8;
+    //     }
 
-        let digest = keccak256(RLP.encode(raw));
-        try {
-            tx.from = recoverAddress(digest, { r: hexlify(tx.r), s: hexlify(tx.s), recoveryParam: recoveryParam });
-        } catch (error) {
-            errors.info(error);
-        }
+    //     let digest = keccak256(RLP.encode(raw));
+    //     try {
+    //         tx.from = recoverAddress(digest, { r: hexlify(tx.r), s: hexlify(tx.s), recoveryParam: recoveryParam });
+    //     } catch (error) {
+    //         errors.info(error);
+    //     }
 
-        tx.hash = keccak256(rawTransaction);
-    }
+    //     tx.hash = keccak256(rawTransaction);
+    // }
 
     return tx;
 }
@@ -221,9 +218,9 @@ export function populateTransaction(transaction: any, provider: Provider, from: 
         tx.to = provider.resolveName(tx.to);
     }
 
-    if (tx.gasPrice == null) {
-        tx.gasPrice = provider.getGasPrice();
-    }
+    // if (tx.gasPrice == null) {
+    //     tx.gasPrice = provider.getGasPrice();
+    // }
 
     if (tx.nonce == null) {
         tx.nonce = provider.getTransactionCount(from);

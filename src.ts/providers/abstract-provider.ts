@@ -14,23 +14,63 @@ import { Transaction } from '../utils/transaction';
 ///////////////////////////////
 // Exported Types
 
+export interface Status {
+    type: string,
+    value: {
+        address: string,
+        coins: [
+            {
+                denom: string,
+                amount: BigNumberish,
+            }
+        ],
+        public_key: {
+            type: string,
+            value: string
+        },
+        account_number: BigNumberish,
+        sequence: BigNumberish,
+    }
+};
+
+export interface AccountState {
+    type: string,
+    value: {
+        address: string,
+        coins: [
+            {
+                denom: string,
+                amount: BigNumberish,
+            }
+        ],
+        public_key: {
+            type: string,
+            value: string
+        },
+        account_number: BigNumberish,
+        sequence: BigNumberish,
+    }
+};
+
 export interface Block {
-    hash: string;
-    parentHash: string;
-    number: number;
-
-    timestamp: number;
-    nonce: string;
-    difficulty: number;
-
-    gasLimit: BigNumber;
-    gasUsed: BigNumber;
-
-    miner: string;
-    extraData: string;
-
-    transactions: Array<string>;
-}
+    blockMeta: {
+        blockId: BlockId,
+        header: BlockHeader
+    },
+    block: {
+        header: BlockHeader
+        data: {
+            txs: any
+        },
+        evidence: {
+            evidence: any
+        },
+        last_commit: {
+            block_id: BlockId,
+            precommits: Array<PreCommit>
+        }
+    }
+};
 
 export type BlockTag = string | number;
 
@@ -41,49 +81,56 @@ export type Filter = {
     topics?: Array<string | Array<string>>,
 }
 
-// @TODO: This is not supported as an EventType yet, as it will
-//        need some additional work to adhere to the serialized
-//        format for events. But we want to allow it for getLogs
-//        for now.
-export type FilterByBlock = {
-    blockHash?: string,
-    address?: string,
-    topics?: Array<string | Array<string>>,
-}
+export interface BlockId {
+    hash: string,
+    parts: {
+        total: number,
+        hash: string
+    }
+};
 
-export interface Log {
-    blockNumber?: number;
-    blockHash?: string;
-    transactionIndex?: number;
+export interface BlockHeader {
+    version: {
+        block: number,
+        app: number
+    },
+    chainId: string,
+    height: number,
+    time: string,
+    numTxs: number,
+    totalTxs: number,
+    lastBlockId: {
+        hash: string,
+        parts: {
+            total: number,
+            hash: string
+        }
+    },
+    lastCommitHash: string,
+    dataHash?: string,
+    validatorsHash: string,
+    nextValidatorsHash: string,
+    consensusHash: string,
+    appHash: string,
+    lastResultsHash?: string,
+    evidenceHash?: string,
+    proposerAddress: string
+};
 
-    removed?: boolean;
-
-    transactionLogIndex?: number,
-
-    address: string;
-    data: string;
-
-    topics: Array<string>;
-
-    transactionHash?: string;
-    logIndex?: number;
-}
+export interface PreCommit {
+    type: number,
+    height: number,
+    round: number,
+    timestamp: string,
+    block_id: BlockId,
+    validator_address: string,
+    validator_index: number,
+    signature: string
+};
 
 export interface TransactionReceipt {
-    to?: string;
-    from?: string;
-    contractAddress?: string,
-    transactionIndex?: number,
-    root?: string,
-    gasUsed?: BigNumber,
-    logsBloom?: string,
-    blockHash?: string,
-    transactionHash?: string,
-    logs?: Array<Log>,
     blockNumber?: number,
     confirmations?: number,
-    cumulativeGasUsed?: BigNumber,
-    byzantium: boolean,
     status?: number
 };
 
@@ -98,7 +145,7 @@ export type TransactionRequest = {
     data?: Arrayish | Promise<Arrayish>,
     value?: BigNumberish | Promise<BigNumberish>,
     chainId?: number | Promise<number>,
-}
+};
 
 export interface TransactionResponse extends Transaction {
     // Only if a transaction has been mined
@@ -129,34 +176,37 @@ export abstract class Provider implements OnceBlockable {
     abstract getNetwork(): Promise<Network>;
 
     abstract getBlockNumber(): Promise<number>;
-    abstract getGasPrice(): Promise<BigNumber>;
 
+    abstract getStatus(): Promise<Status>;
+    abstract getAccountState(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<AccountState>;
+    abstract getAccountNumber(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber>;
     abstract getBalance(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber>;
-    abstract getTransactionCount(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<number>;
-    abstract getCode(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> ;
-    abstract getStorageAt(addressOrName: string | Promise<string>, position: BigNumberish | Promise<BigNumberish>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
+
+    abstract getTransactionCount(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber>;
+    // abstract getCode(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
+    // abstract getStorageAt(addressOrName: string | Promise<string>, position: BigNumberish | Promise<BigNumberish>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
 
     abstract sendTransaction(signedTransaction: string | Promise<string>): Promise<TransactionResponse>;
-    abstract call(transaction: TransactionRequest, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
+    // abstract call(transaction: TransactionRequest, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
     abstract estimateGas(transaction: TransactionRequest): Promise<BigNumber>;
 
-    abstract getBlock(blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>, includeTransactions?: boolean): Promise<Block>;
-    abstract getTransaction(transactionHash: string): Promise<TransactionResponse>;
-    abstract getTransactionReceipt(transactionHash: string): Promise<TransactionReceipt>;
+    // abstract getBlock(blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>, includeTransactions?: boolean): Promise<Block>;
+    // abstract getTransaction(transactionHash: string): Promise<TransactionResponse>;
+    // abstract getTransactionReceipt(transactionHash: string): Promise<TransactionReceipt>;
 
-    abstract getLogs(filter: Filter | FilterByBlock): Promise<Array<Log>>;
+    // abstract getLogs(filter: Filter | FilterByBlock): Promise<Array<Log>>;
 
     abstract resolveName(name: string | Promise<string>): Promise<string>;
-    abstract lookupAddress(address: string | Promise<string>): Promise<string>;
+    // abstract lookupAddress(address: string | Promise<string>): Promise<string>;
     abstract on(eventName: EventType, listener: Listener): Provider;
     abstract once(eventName: EventType, listener: Listener): Provider;
-    abstract listenerCount(eventName?: EventType): number;
-    abstract listeners(eventName: EventType): Array<Listener>;
-    abstract removeAllListeners(eventName: EventType): Provider;
-    abstract removeListener(eventName: EventType, listener: Listener): Provider;
+    // abstract listenerCount(eventName?: EventType): number;
+    // abstract listeners(eventName: EventType): Array<Listener>;
+    // abstract removeAllListeners(eventName: EventType): Provider;
+    // abstract removeListener(eventName: EventType, listener: Listener): Provider;
 
-    // @TODO: This *could* be implemented here, but would pull in events...
-    abstract waitForTransaction(transactionHash: string, timeout?: number): Promise<TransactionReceipt>;
+    // // @TODO: This *could* be implemented here, but would pull in events...
+    // abstract waitForTransaction(transactionHash: string, timeout?: number): Promise<TransactionReceipt>;
 
     constructor() {
         setType(this, 'Provider');
@@ -166,7 +216,7 @@ export abstract class Provider implements OnceBlockable {
         return isType(value, 'Provider');
     }
 
-//    readonly inherits: (child: any) => void;
+    //    readonly inherits: (child: any) => void;
 }
 
 //defineReadOnly(Signer, 'inherits', inheritable(Abstract));

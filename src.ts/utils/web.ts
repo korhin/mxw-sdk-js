@@ -1,6 +1,6 @@
 'use strict';
 
-import { XMLHttpRequest } from 'xmlhttprequest';
+import request from 'request';
 
 import { encode as base64Encode } from './base64';
 import { shallowCopy } from './properties';
@@ -37,23 +37,23 @@ export type PollOptions = {
 type Header = { key: string, value: string };
 
 export function fetchJson(connection: string | ConnectionInfo, json: string, processFunc: (value: any) => any): Promise<any> {
-    let headers: { [key: string]: Header } = { };
+    let headers: { [key: string]: Header } = {};
 
     let url: string = null;
 
     let timeout = 2 * 60 * 1000;
 
-    if (typeof(connection) === 'string') {
+    if (typeof (connection) === 'string') {
         url = connection;
 
-    } else if (typeof(connection) === 'object') {
+    } else if (typeof (connection) === 'object') {
         if (connection.url == null) {
             errors.throwError('missing URL', errors.MISSING_ARGUMENT, { arg: 'url' });
         }
 
         url = connection.url;
 
-        if (typeof(connection.timeout) === 'number' && connection.timeout > 0) {
+        if (typeof (connection.timeout) === 'number' && connection.timeout > 0) {
             timeout = connection.timeout;
         }
 
@@ -80,106 +80,70 @@ export function fetchJson(connection: string | ConnectionInfo, json: string, pro
         }
     }
 
-    return new Promise(function(resolve, reject) {
-        let request = new XMLHttpRequest();
-
-        let timer: any = null;
-        timer = setTimeout(() => {
-            if (timer == null) { return; }
-            timer = null;
-
-            reject(new Error('timeout'));
-            setTimeout(() => {
-                request.abort();
-            }, 0);
-        }, timeout);
-
-        let cancelTimeout = () => {
-            if (timer == null) { return; }
-            clearTimeout(timer);
-            timer = null;
-        }
-
-        if (json) {
-            request.open('POST', url, true);
-            headers['content-type'] = { key: 'Content-Type', value: 'application/json' };
-        } else {
-            request.open('GET', url, true);
-        }
-
-        Object.keys(headers).forEach((key) => {
-            let header = headers[key];
-            request.setRequestHeader(header.key, header.value);
-        });
-
-        request.onreadystatechange = function() {
-            if (request.readyState !== 4) { return; }
-
-            if (request.status != 200) {
-                cancelTimeout();
-                // @TODO: not any!
-                let error: any = new Error('invalid response - ' + request.status);
-                error.statusCode = request.status;
-                if (request.responseText) {
-                    error.responseText = request.responseText;
-                }
-                reject(error);
-                return;
-            }
-
-            let result: any = null;
-            try {
-                result = JSON.parse(request.responseText);
-            } catch (error) {
-                cancelTimeout();
-                // @TODO: not any!
-                let jsonError: any = new Error('invalid json response');
+    return new Promise(function (resolve, reject) {
+        let responseHandler = function (error, res, body) {
+            if (error) {
+                let jsonError: any = new Error('invalid response');
                 jsonError.orginialError = error;
-                jsonError.responseText = request.responseText;
+                jsonError.responseText = body;
                 if (json != null) {
                     jsonError.requestBody = json;
                 }
                 jsonError.url = url;
-                reject(jsonError);
-                return;
+                return reject(jsonError);
             }
+            else {
+                if (200 != res.statusCode) {
+                    // @TODO: not any!
+                    let error: any = new Error('invalid response - ' + res.statusCode);
+                    error.statusCode = res.statusCode;
+                    if (body) {
+                        error.responseText = body;
+                    }
+                    return reject(error);
+                }
+            }
+
+            let result: any = body;
+            // try {
+            //     result = body;
+            // } catch (error) {
+            //     let jsonError: any = new Error('invalid json response');
+            //     jsonError.orginialError = error;
+            //     jsonError.responseText = body;
+            //     if (json != null) {
+            //         jsonError.requestBody = json;
+            //     }
+            //     jsonError.url = url;
+            //     reject(jsonError);
+            //     return;
+            // }
 
             if (processFunc) {
                 try {
                     result = processFunc(result);
                 } catch (error) {
-                    cancelTimeout();
                     error.url = url;
                     error.body = json;
-                    error.responseText = request.responseText;
+                    error.responseText = body;
                     reject(error);
                     return;
                 }
             }
 
-            cancelTimeout();
-            resolve(result);
+            return resolve(result);
         };
 
-        request.onerror = function(error) {
-            cancelTimeout();
-            reject(error);
-        }
+        let options = {
+            headers: headers,
+            timeout: timeout
+        };
 
-        try {
-            if (json != null) {
-                request.send(json);
-            } else {
-                request.send();
-            }
+        if (!json)
+            return request.get(url, options, responseHandler);
 
-        } catch (error) {
-            cancelTimeout();
-            // @TODO: not any!
-            let connectionError: any = new Error('connection error');
-            connectionError.error = error;
-            reject(connectionError);
-        }
+        options["json"] = JSON.parse(json);
+        return request.post(url, options, responseHandler);
     });
 }
 

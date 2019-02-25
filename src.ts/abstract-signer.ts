@@ -6,7 +6,7 @@ import { Provider } from './providers/abstract-provider';
 
 // Imported Types
 import { Arrayish } from './utils/bytes';
-import { TransactionRequest, TransactionResponse } from './providers/abstract-provider';
+// import { TransactionRequest, TransactionResponse } from './providers/abstract-provider';
 
 
 export abstract class Signer {
@@ -15,7 +15,7 @@ export abstract class Signer {
     abstract getAddress(): Promise<string>
 
     abstract signMessage(message: Arrayish | string): Promise<string>;
-    abstract sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse>;
+    // abstract sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse>;
 
     constructor() {
         setType(this, 'Signer');

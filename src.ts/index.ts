@@ -1,6 +1,3 @@
-
-import * as ethers from './ethers';
-
-export { ethers };
-
-export * from './ethers';
+import * as mxw from './mxw';
+export { mxw };
+export * from './mxw';

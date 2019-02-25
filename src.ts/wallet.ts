@@ -5,13 +5,13 @@ import { BigNumber } from './utils/bignumber';
 import { hashMessage } from './utils/hash';
 import { defaultPath, HDNode, entropyToMnemonic, fromMnemonic } from './utils/hdnode';
 import { isCrowdsaleWallet, isSecretStorageWallet } from './utils/json-wallet';
-import { keccak256 } from './utils/keccak256';
-import { defineReadOnly, resolveProperties, shallowCopy } from './utils/properties';
+import { defineReadOnly, shallowCopy } from './utils/properties';
 import { randomBytes } from './utils/random-bytes';
 import * as secretStorage from './utils/secret-storage';
 import { SigningKey } from './utils/signing-key';
-import { populateTransaction, serialize as serializeTransaction } from './utils/transaction';
+// import { populateTransaction, serialize as serializeTransaction } from './utils/transaction';
 import { Wordlist } from './utils/wordlist';
+import { sha256 } from './utils/sha2';
 
 // Imported Abstracts
 import { Signer as AbstractSigner } from './abstract-signer';
@@ -20,7 +20,7 @@ import { Provider } from './providers/abstract-provider';
 // Imported Types
 import { ProgressCallback } from './utils/secret-storage';
 import { Arrayish } from './utils/bytes';
-import { BlockTag, TransactionRequest, TransactionResponse } from './providers/abstract-provider';
+import { BlockTag } from './providers/abstract-provider';
 
 import * as errors from './errors';
 
@@ -66,13 +66,13 @@ export class Wallet extends AbstractSigner {
         return Promise.resolve(this.address);
     }
 
-    sign(transaction: TransactionRequest): Promise<string> {
-        return resolveProperties(transaction).then((tx) => {
-            let rawTx = serializeTransaction(tx);
-            let signature = this.signingKey.signDigest(keccak256(rawTx));
-            return serializeTransaction(tx, signature);
-        });
-    }
+    // sign(transaction: TransactionRequest): Promise<string> {
+    //     return resolveProperties(transaction).then((tx) => {
+    //         let rawTx = serializeTransaction(tx);
+    //         let signature = this.signingKey.signDigest(keccak256(rawTx));
+    //         return serializeTransaction(tx, signature);
+    //     });
+    // }
 
     signMessage(message: Arrayish | string): Promise<string> {
         return Promise.resolve(joinSignature(this.signingKey.signDigest(hashMessage(message))));
@@ -84,25 +84,25 @@ export class Wallet extends AbstractSigner {
         return this.provider.getBalance(this.address, blockTag);
     }
 
-    getTransactionCount(blockTag?: BlockTag): Promise<number> {
+    getTransactionCount(blockTag?: BlockTag): Promise<BigNumber> {
         if (!this.provider) { throw new Error('missing provider'); }
         return this.provider.getTransactionCount(this.address, blockTag);
     }
 
-    sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse> {
-        if (!this.provider) { throw new Error('missing provider'); }
+    // sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse> {
+    //     if (!this.provider) { throw new Error('missing provider'); }
 
-        if (transaction.nonce == null) {
-            transaction = shallowCopy(transaction);
-            transaction.nonce = this.getTransactionCount("pending");
-        }
+    //     if (transaction.nonce == null) {
+    //         transaction = shallowCopy(transaction);
+    //         transaction.nonce = this.getTransactionCount("pending");
+    //     }
 
-        return populateTransaction(transaction, this.provider, this.address).then((tx) => {
-             return this.sign(tx).then((signedTransaction) => {
-                 return this.provider.sendTransaction(signedTransaction);
-             });
-        });
-    }
+    //     return populateTransaction(transaction, this.provider, this.address).then((tx) => {
+    //          return this.sign(tx).then((signedTransaction) => {
+    //              return this.provider.sendTransaction(signedTransaction);
+    //          });
+    //     });
+    // }
 
     encrypt(password: Arrayish | string, options?: any, progressCallback?: ProgressCallback): Promise<string> {
         if (typeof(options) === 'function' && !progressCallback) {
@@ -138,7 +138,7 @@ export class Wallet extends AbstractSigner {
         if (!options) { options = { }; }
 
         if (options.extraEntropy) {
-            entropy = arrayify(keccak256(concat([entropy, options.extraEntropy])).substring(0, 34));
+            entropy = arrayify(sha256(concat([entropy, options.extraEntropy])).substring(0, 34));
         }
 
         var mnemonic = entropyToMnemonic(entropy, options.locale);

@@ -10,7 +10,7 @@ import { HDNode } from './hdnode';
 
 import { arrayify, hexlify } from './bytes';
 import { defineReadOnly, isType, setType } from './properties';
-import { computeAddress, KeyPair } from './secp256k1';
+import { computeAddress, computeHexAddress, KeyPair } from './secp256k1';
 
 import * as errors from '../errors';
 
@@ -26,6 +26,7 @@ export class SigningKey {
     readonly privateKey: string;
     readonly publicKey: string;
     readonly address: string;
+    readonly hexAddress: string;
 
     readonly mnemonic: string;
     readonly path: string;
@@ -68,6 +69,7 @@ export class SigningKey {
         defineReadOnly(this, 'keyPair', new KeyPair(privateKeyBytes));
         defineReadOnly(this, 'publicKey', this.keyPair.publicKey);
         defineReadOnly(this, 'address', computeAddress(this.keyPair.publicKey));
+        defineReadOnly(this, 'hexAddress', computeHexAddress(this.address));
 
         setType(this, 'SigningKey');
     }

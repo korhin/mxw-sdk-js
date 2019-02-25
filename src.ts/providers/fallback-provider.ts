@@ -31,9 +31,7 @@ function checkNetworks(networks: Array<Network>): boolean {
 
         // Matches!
         if (check.name === network.name &&
-            check.chainId === network.chainId &&
-            ((check.ensAddress === network.ensAddress) ||
-                (check.ensAddress == null && network.ensAddress == null))) { return; }
+            check.chainId === network.chainId) { return; }
 
         errors.throwError(
             'provider mismatch',

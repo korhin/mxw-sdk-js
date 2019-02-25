@@ -1,13 +1,15 @@
 'use strict';
 
 import { ec as EC } from 'elliptic';
+import { createHash } from 'crypto';
 
+import { AddressPrefix } from '../constants';
 import { getAddress } from './address';
 
 import { arrayify, hexlify, hexZeroPad, splitSignature } from './bytes';
 import { hashMessage } from './hash';
-import { keccak256 } from './keccak256';
 import { defineReadOnly } from './properties';
+import { encode as bech32Encode, decode as bech32Decode, fromWords as bech32FromWords, toWords as bech32ToWords } from './bech32';
 
 import * as errors from '../errors';
 
@@ -26,6 +28,9 @@ function getCurve() {
     return _curve;
 }
 
+function hash(algorithm: string, data: string | Buffer) {
+    return createHash(algorithm).update(data).digest();
+}
 
 export class KeyPair {
 
@@ -95,9 +100,15 @@ export function computePublicKey(key: Arrayish | string, compressed?: boolean): 
 }
 
 export function computeAddress(key: Arrayish | string): string {
-    // Strip off the leading "0x04"
-    let publicKey = '0x' + computePublicKey(key).slice(4);
-    return getAddress('0x' + keccak256(publicKey).substring(26));
+    // Strip off the leading "0x"
+    let publicKey = computePublicKey(key, true).substring(2);
+    let bytes = hash('ripemd160', hash('sha256', Buffer.from(publicKey, 'hex')));
+
+    return getAddress(bech32Encode(AddressPrefix, bech32ToWords(bytes)));
+}
+
+export function computeHexAddress(address: string): string {
+    return getAddress(hexlify(bech32FromWords(bech32Decode(address).words)));
 }
 
 export function recoverPublicKey(digest: Arrayish | string, signature: Signature | string): string {
