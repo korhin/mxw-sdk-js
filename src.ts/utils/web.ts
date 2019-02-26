@@ -1,6 +1,6 @@
 'use strict';
 
-import request from 'request';
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
 import { encode as base64Encode } from './base64';
 import { shallowCopy } from './properties';
@@ -81,30 +81,29 @@ export function fetchJson(connection: string | ConnectionInfo, json: string, pro
     }
 
     return new Promise(function (resolve, reject) {
-        let responseHandler = function (error, res, body) {
-            if (error) {
-                let jsonError: any = new Error('invalid response');
+        let responseHandler = function (error: AxiosError, response: AxiosResponse) {
+            if (error || !response) {
+                let jsonError: any = new Error('connection error');
                 jsonError.orginialError = error;
-                jsonError.responseText = body;
+                if (null != response) jsonError.responseText = response.data;
                 if (json != null) {
                     jsonError.requestBody = json;
                 }
                 jsonError.url = url;
                 return reject(jsonError);
             }
-            else {
-                if (200 != res.statusCode) {
-                    // @TODO: not any!
-                    let error: any = new Error('invalid response - ' + res.statusCode);
-                    error.statusCode = res.statusCode;
-                    if (body) {
-                        error.responseText = body;
-                    }
-                    return reject(error);
+
+            if (200 != response.status) {
+                // @TODO: not any!
+                let error: any = new Error('invalid response - ' + response.status);
+                error.statusCode = response.status;
+                if (response.data) {
+                    error.responseText = response.data;
                 }
+                return reject(error);
             }
 
-            let result: any = body;
+            let result = response.data;
             // try {
             //     result = body;
             // } catch (error) {
@@ -125,25 +124,32 @@ export function fetchJson(connection: string | ConnectionInfo, json: string, pro
                 } catch (error) {
                     error.url = url;
                     error.body = json;
-                    error.responseText = body;
-                    reject(error);
-                    return;
+                    error.responseText = response.data;
+                    return reject(error);
                 }
             }
 
             return resolve(result);
         };
 
-        let options = {
+        let config: AxiosRequestConfig = {
             headers: headers,
             timeout: timeout
         };
 
-        if (!json)
-            return request.get(url, options, responseHandler);
+        if (!json) {
+            return axios.get(url, config).then((response) => {
+                return responseHandler(undefined, response);
+            }).catch(error => {
+                return responseHandler(error, undefined);
+            });
+        }
 
-        options["json"] = JSON.parse(json);
-        return request.post(url, options, responseHandler);
+        return axios.post(url, json, config).then((response) => {
+            return responseHandler(undefined, response);
+        }).catch(error => {
+            return responseHandler(error, undefined);
+        });
     });
 }
 
@@ -154,7 +160,7 @@ export function poll(func: () => Promise<any>, options?: PollOptions): Promise<a
     if (options.ceiling == null) { options.ceiling = 10000; }
     if (options.interval == null) { options.interval = 250; }
 
-    return new Promise(function(resolve, reject) {
+    return new Promise(function (resolve, reject) {
 
         let timer: any = null;
         let done: boolean = false;
@@ -177,7 +183,7 @@ export function poll(func: () => Promise<any>, options?: PollOptions): Promise<a
 
         let attempt = 0;
         function check() {
-            return func().then(function(result) {
+            return func().then(function (result) {
 
                 // If we have a result, or are allowed null then we're done
                 if (result !== undefined) {
@@ -186,7 +192,7 @@ export function poll(func: () => Promise<any>, options?: PollOptions): Promise<a
                 } else if (options.onceBlock) {
                     options.onceBlock.once('block', check);
 
-                // Otherwise, exponential back-off (up to 10s) our next request
+                    // Otherwise, exponential back-off (up to 10s) our next request
                 } else if (!done) {
                     attempt++;
 
@@ -205,7 +211,7 @@ export function poll(func: () => Promise<any>, options?: PollOptions): Promise<a
                 }
 
                 return null;
-            }, function(error) {
+            }, function (error) {
                 if (cancel()) { reject(error); }
             });
         }
