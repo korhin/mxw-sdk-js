@@ -9,6 +9,8 @@ let indent = "     ";
 
 describe('Suite: Wallet', function () {
     it("Wallet.createRandom", function () {
+        console.log("mxw:", mxw);
+
         let randomWallet = mxw.Wallet.createRandom();
         expect(randomWallet).to.exist;
         console.log(indent, "Wallet:", JSON.stringify(randomWallet));
