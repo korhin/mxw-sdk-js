@@ -1216,39 +1216,71 @@ export class BaseProvider extends Provider {
         return Promise.all(promises).then(function () { return result; });
     }
 
-    resolveName(name: string | Promise<string>): Promise<string> {
+    isWhitelisted(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<boolean> {
+        return resolveProperties({ addressOrName: addressOrName, blockTag: blockTag }).then(({ addressOrName, blockTag }) => {
+            // If it is a promise, resolve it then recurse
+            if (addressOrName instanceof Promise) {
+                return addressOrName.then((address) => {
+                    return this.resolveName(address, blockTag);
+                });
+            }
 
-        // If it is a promise, resolve it then recurse
-        if (name instanceof Promise) {
-            return name.then((addressOrName) => {
-                return this.resolveName(addressOrName);
-            });
-        }
-
-        // If it is already an address, nothing to resolve
-        try {
-            return Promise.resolve(getAddress(name));
-        } catch (error) { }
-
-        return this.ready.then(() => {
-            return this.perform('resolveName', { name: name }).then((result) => {
-                return result;
+            return this.ready.then(() => {
+                let params = {
+                    address: addressOrName,
+                    blockTag: checkBlockTag(blockTag)
+                };
+                return this.perform('isWhitelisted', params).then((result) => {
+                    return result;
+                });
             });
         });
     }
 
-    lookupAddress(address: string | Promise<string>): Promise<string> {
-        if (address instanceof Promise) {
-            return address.then((address) => {
-                return this.lookupAddress(address);
+    resolveName(name: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> {
+        return resolveProperties({ name: name, blockTag: blockTag }).then(({ name, blockTag }) => {
+            // If it is a promise, resolve it then recurse
+            if (name instanceof Promise) {
+                return name.then((addressOrName) => {
+                    return this.resolveName(addressOrName, blockTag);
+                });
+            }
+
+            // If it is already an address, nothing to resolve
+            try {
+                return Promise.resolve(getAddress(name));
+            } catch (error) { }
+
+            return this.ready.then(() => {
+                let params = {
+                    name: name,
+                    blockTag: checkBlockTag(blockTag)
+                };
+                return this.perform('resolveName', params).then((result) => {
+                    return result;
+                });
             });
-        }
+        });
+    }
 
-        address = getAddress(address);
+    lookupAddress(address: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> {
+        return resolveProperties({ address: address, blockTag: blockTag }).then(({ address, blockTag }) => {
+            if (address instanceof Promise) {
+                return address.then((address) => {
+                    return this.lookupAddress(address);
+                });
+            }
 
-        return this.ready.then(() => {
-            return this.perform('lookupAddress', { address: address }).then((result) => {
-                return result;
+            address = getAddress(address);
+
+            return this.ready.then(() => {
+                let params = {
+                    address: address,
+                    blockTag: checkBlockTag(blockTag)
+                };
+                return this.perform('lookupAddress', params).then((result) => {
+                    return result;
+                });
             });
         });
     }

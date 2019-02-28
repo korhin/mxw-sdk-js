@@ -56,7 +56,7 @@ function base58check(data: Uint8Array): string {
 
 const _constructorGuard: any = {};
 
-export const defaultPath = "m/44'/60'/0'/0/0";
+export const defaultPath = "m/44'/118'/0'/0/0";
 
 export class HDNode {
     readonly privateKey: string;

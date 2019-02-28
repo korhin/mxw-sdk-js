@@ -1,10 +1,8 @@
 'use strict';
 
-var assert = require('assert');
-const { expect } = require('chai');
-
-var utils = require('./utils');
-var mxw = utils.getMxw(__filename);
+import { describe, it } from 'mocha';
+import { expect } from 'chai';
+import { mxw } from '../src.ts/index';
 
 describe('Suite: Utils', function () {
     it("Test bytes", function () {

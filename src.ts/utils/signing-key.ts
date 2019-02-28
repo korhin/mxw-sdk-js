@@ -25,6 +25,7 @@ export class SigningKey {
 
     readonly privateKey: string;
     readonly publicKey: string;
+    readonly compressedPublicKey: string;
     readonly address: string;
     readonly hexAddress: string;
 
@@ -68,6 +69,7 @@ export class SigningKey {
         defineReadOnly(this, 'privateKey', hexlify(privateKeyBytes));
         defineReadOnly(this, 'keyPair', new KeyPair(privateKeyBytes));
         defineReadOnly(this, 'publicKey', this.keyPair.publicKey);
+        defineReadOnly(this, 'compressedPublicKey', this.keyPair.compressedPublicKey);
         defineReadOnly(this, 'address', computeAddress(this.keyPair.publicKey));
         defineReadOnly(this, 'hexAddress', computeHexAddress(this.address));
 

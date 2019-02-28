@@ -176,15 +176,15 @@ export function decrypt(json: string, password: Arrayish, progressCallback?: Pro
             return null;
         }
 
-        // Version 0.1 x-ethers metadata must contain an encrypted mnemonic phrase
-        if (searchPath(data, 'x-ethers/version') === '0.1') {
-            var mnemonicCiphertext = looseArrayify(searchPath(data, 'x-ethers/mnemonicCiphertext'));
-            var mnemonicIv = looseArrayify(searchPath(data, 'x-ethers/mnemonicCounter'));
+        // Version 0.1 x-mxw metadata must contain an encrypted mnemonic phrase
+        if (searchPath(data, 'x-mxw/version') === '0.1') {
+            var mnemonicCiphertext = looseArrayify(searchPath(data, 'x-mxw/mnemonicCiphertext'));
+            var mnemonicIv = looseArrayify(searchPath(data, 'x-mxw/mnemonicCounter'));
 
             var mnemonicCounter = new aes.Counter(mnemonicIv);
             var mnemonicAesCtr = new aes.ModeOfOperation.ctr(mnemonicKey, mnemonicCounter);
 
-            var path = searchPath(data, 'x-ethers/path') || HDNode.defaultPath;
+            var path = searchPath(data, 'x-mxw/path') || HDNode.defaultPath;
 
             var entropy = arrayify(mnemonicAesCtr.decrypt(mnemonicCiphertext));
             var mnemonic = HDNode.entropyToMnemonic(entropy);
@@ -398,7 +398,7 @@ export function encrypt(privateKey: Arrayish | SigningKey, password: Arrayish | 
 
                 // See: https://github.com/ethereum/wiki/wiki/Web3-Secret-Storage-Definition
                 var data: { [key: string]: any } = {
-                    address: address.substring(2).toLowerCase(),
+                    address: address.toLowerCase(),
                     id: uuid.v4({ random: uuidRandom }),
                     version: 3,
                     Crypto: {
@@ -433,7 +433,7 @@ export function encrypt(privateKey: Arrayish | SigningKey, password: Arrayish | 
                                      zpad(now.getUTCMinutes(), 2) + '-' +
                                      zpad(now.getUTCSeconds(), 2) + '.0Z'
                                     );
-                    data['x-ethers'] = {
+                    data['x-mxw'] = {
                         client: client,
                         gethFilename: ('UTC--' + timestamp + '--' + data.address),
                         mnemonicCounter: hexlify(mnemonicIv).substring(2),

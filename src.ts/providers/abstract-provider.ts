@@ -196,8 +196,10 @@ export abstract class Provider implements OnceBlockable {
 
     // abstract getLogs(filter: Filter | FilterByBlock): Promise<Array<Log>>;
 
-    abstract resolveName(name: string | Promise<string>): Promise<string>;
-    // abstract lookupAddress(address: string | Promise<string>): Promise<string>;
+    abstract isWhitelisted(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
+    
+    abstract resolveName(name: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
+    abstract lookupAddress(address: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
     abstract on(eventName: EventType, listener: Listener): Provider;
     abstract once(eventName: EventType, listener: Listener): Provider;
     // abstract listenerCount(eventName?: EventType): number;

@@ -84,17 +84,7 @@ export class JsonRpcSigner extends Signer {
     }
 
     getAddress(): Promise<string> {
-        if (this._address) {
-            return Promise.resolve(this._address);
-        }
-
-        return this.provider.send('eth_accounts', []).then((accounts) => {
-            if (accounts.length <= this._index) {
-                errors.throwError('unknown account #' + this._index, errors.UNSUPPORTED_OPERATION, { operation: 'getAddress' });
-            }
-            this._address = getAddress(accounts[this._index]);
-            return this._address;
-        });
+        return Promise.resolve(this._address);
     }
 
     getBalance(blockTag?: BlockTag): Promise<BigNumber> {
@@ -103,6 +93,14 @@ export class JsonRpcSigner extends Signer {
 
     getTransactionCount(blockTag?: BlockTag): Promise<BigNumber> {
         return this.provider.getTransactionCount(this.getAddress(), blockTag);
+    }
+
+    resolveName(name: string | Promise<string>): Promise<string> {
+        return this.provider.resolveName(name);
+    }
+
+    lookupAddress(address: string | Promise<string>): Promise<string> {
+        return this.provider.lookupAddress(address);
     }
 
     // sendUncheckedTransaction(transaction: TransactionRequest): Promise<string> {
@@ -177,14 +175,6 @@ export class JsonRpcSigner extends Signer {
             return this.provider.send('eth_sign', [address.toLowerCase(), hexlify(data)]);
         });
     }
-
-    unlock(password: string): Promise<boolean> {
-        let provider = this.provider;
-
-        return this.getAddress().then(function (address) {
-            return provider.send('personal_unlockAccount', [address.toLowerCase(), password, null]);
-        });
-    }
 }
 
 const allowedTransactionKeys: { [key: string]: boolean } = {
@@ -244,12 +234,6 @@ export class JsonRpcProvider extends BaseProvider {
         return new JsonRpcSigner(_constructorGuard, this, addressOrIndex);
     }
 
-    listAccounts(): Promise<Array<string>> {
-        return this.send('eth_accounts', []).then((accounts: Array<string>) => {
-            return accounts.map((a) => getAddress(a));
-        });
-    }
-
     send(method: string, params: any): Promise<any> {
         let request = {
             method: method,
@@ -271,6 +255,26 @@ export class JsonRpcProvider extends BaseProvider {
 
     perform(method: string, params: any): Promise<any> {
         switch (method) {
+            case 'isWhitelisted':
+                return this.send('abci_query', ["/custom/kyc/is_whitelisted/" + params.address, "", params.blockTag, null]).then(result => {
+                    if (result && result.response) {
+                        if (result.response.value) {
+                            try {
+                                let value = base64Decode(result.response.value);
+                                return ("True" === toUtf8String(value));
+                            }
+                            catch (error) {
+                            }
+                        }
+                        else {
+                            if (7 /* not whitelisted */ == result.response.code)
+                                return false;
+                        }
+                    }
+
+                    return errors.throwError(method + ' invalid json response', errors.INVALID_ARGUMENT, { operation: method, response: result });
+                });
+
             case 'getStatus':
                 return this.send('status', []);
 
@@ -289,11 +293,11 @@ export class JsonRpcProvider extends BaseProvider {
                         return null;
                     }
 
-                    errors.throwError(method + ' invalid json response', errors.INVALID_ARGUMENT, { operation: method, response: result });
+                    return errors.throwError(method + ' invalid json response', errors.INVALID_ARGUMENT, { operation: method, response: result });
                 });
 
             case 'resolveName':
-                return this.send('abci_query', ["/custom/nameservice/resolve/" + params.name]).then(result => {
+                return this.send('abci_query', ["/custom/nameservice/resolve/" + params.name, "", params.blockTag, null]).then(result => {
                     if (result && result.response) {
                         if (result.response.value) {
                             try {
@@ -305,7 +309,7 @@ export class JsonRpcProvider extends BaseProvider {
                         }
                         else {
                             if (6 /* could not resolve name */ == result.response.code)
-                                return null;
+                                return undefined;
                         }
                     }
 
@@ -313,37 +317,43 @@ export class JsonRpcProvider extends BaseProvider {
                 });
 
             case 'lookupAddress':
-                return this.send('abci_query', ["/custom/nameservice/whois/" + params.address]).then(result => {
-                    if (result && result.response && result.response.value) {
-                        try {
-                            let value = base64Decode(result.response.value);
-                            return value;
+                return this.send('abci_query', ["/custom/nameservice/whois/" + params.address, "", params.blockTag, null]).then(result => {
+                    if (result && result.response) {
+                        if (result.response.value) {
+                            try {
+                                let value = base64Decode(result.response.value);
+                                return toUtf8String(value);
+                            }
+                            catch (error) {
+                            }
                         }
-                        catch (error) {
+                        else {
+                            if (7 /* address not set */ == result.response.code)
+                                return undefined;
                         }
                     }
 
                     return errors.throwError(method + ' invalid json response', errors.INVALID_ARGUMENT, { operation: method, response: result });
                 });
 
-            case 'sendTransaction':
-                return this.send('eth_sendRawTransaction', [params.signedTransaction]).catch((error) => {
-                    if (error.responseText) {
-                        // "insufficient funds for gas * price + value"
-                        if (error.responseText.indexOf('insufficient funds') > 0) {
-                            errors.throwError('insufficient funds', errors.INSUFFICIENT_FUNDS, {});
-                        }
-                        // "nonce too low"
-                        if (error.responseText.indexOf('nonce too low') > 0) {
-                            errors.throwError('nonce has already been used', errors.NONCE_EXPIRED, {});
-                        }
-                        // "replacement transaction underpriced"
-                        if (error.responseText.indexOf('replacement transaction underpriced') > 0) {
-                            errors.throwError('replacement fee too low', errors.REPLACEMENT_UNDERPRICED, {});
-                        }
-                    }
-                    throw error;
-                });
+            // case 'sendTransaction':
+            //     return this.send('eth_sendRawTransaction', [params.signedTransaction]).catch((error) => {
+            //         if (error.responseText) {
+            //             // "insufficient funds for gas * price + value"
+            //             if (error.responseText.indexOf('insufficient funds') > 0) {
+            //                 errors.throwError('insufficient funds', errors.INSUFFICIENT_FUNDS, {});
+            //             }
+            //             // "nonce too low"
+            //             if (error.responseText.indexOf('nonce too low') > 0) {
+            //                 errors.throwError('nonce has already been used', errors.NONCE_EXPIRED, {});
+            //             }
+            //             // "replacement transaction underpriced"
+            //             if (error.responseText.indexOf('replacement transaction underpriced') > 0) {
+            //                 errors.throwError('replacement fee too low', errors.REPLACEMENT_UNDERPRICED, {});
+            //             }
+            //         }
+            //         throw error;
+            //     });
 
             case 'getBlock':
                 return this.send('block', [params.blockTag]);

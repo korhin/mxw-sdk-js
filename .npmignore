@@ -2,3 +2,5 @@ node_modules/
 src.ts/
 tests/
 package-lock.json
+webpack.config.js
+.babelrc

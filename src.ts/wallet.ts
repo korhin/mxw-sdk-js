@@ -50,6 +50,7 @@ export class Wallet extends AbstractSigner {
     get path(): string { return this.signingKey.path; }
 
     get privateKey(): string { return this.signingKey.privateKey; }
+    get compressedPublicKey(): string { return this.signingKey.compressedPublicKey; }
 
 
     /**
@@ -78,7 +79,6 @@ export class Wallet extends AbstractSigner {
         return Promise.resolve(joinSignature(this.signingKey.signDigest(hashMessage(message))));
     }
 
-
     getBalance(blockTag?: BlockTag): Promise<BigNumber> {
         if (!this.provider) { throw new Error('missing provider'); }
         return this.provider.getBalance(this.address, blockTag);
@@ -87,6 +87,11 @@ export class Wallet extends AbstractSigner {
     getTransactionCount(blockTag?: BlockTag): Promise<BigNumber> {
         if (!this.provider) { throw new Error('missing provider'); }
         return this.provider.getTransactionCount(this.address, blockTag);
+    }
+
+    isWhitelisted(blockTag?: BlockTag): Promise<Boolean> {
+        if (!this.provider) { throw new Error('missing provider'); }
+        return this.provider.isWhitelisted(this.address, blockTag);
     }
 
     // sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse> {
@@ -105,12 +110,12 @@ export class Wallet extends AbstractSigner {
     // }
 
     encrypt(password: Arrayish | string, options?: any, progressCallback?: ProgressCallback): Promise<string> {
-        if (typeof(options) === 'function' && !progressCallback) {
+        if (typeof (options) === 'function' && !progressCallback) {
             progressCallback = options;
             options = {};
         }
 
-        if (progressCallback && typeof(progressCallback) !== 'function') {
+        if (progressCallback && typeof (progressCallback) !== 'function') {
             throw new Error('invalid callback');
         }
 
@@ -135,7 +140,7 @@ export class Wallet extends AbstractSigner {
     static createRandom(options?: any): Wallet {
         var entropy: Uint8Array = randomBytes(16);
 
-        if (!options) { options = { }; }
+        if (!options) { options = {}; }
 
         if (options.extraEntropy) {
             entropy = arrayify(sha256(concat([entropy, options.extraEntropy])).substring(0, 34));
@@ -158,7 +163,7 @@ export class Wallet extends AbstractSigner {
 
         } else if (isSecretStorageWallet(json)) {
 
-            return secretStorage.decrypt(json, password, progressCallback).then(function(signingKey) {
+            return secretStorage.decrypt(json, password, progressCallback).then(function (signingKey) {
                 return new Wallet(signingKey);
             });
         }
