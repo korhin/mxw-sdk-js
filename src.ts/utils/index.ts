@@ -1,7 +1,7 @@
 'use strict';
 
 import { keccak256 } from './keccak256';
-import { parse as parseTransaction, serialize as serializeTransaction } from './transaction';
+// import { parse as parseTransaction, serialize as serializeTransaction } from './transaction';
 import { getNetwork } from './networks';
 import { getJsonWalletAddress } from './json-wallet';
 import { randomBytes } from './random-bytes';
@@ -33,11 +33,30 @@ import { Wordlist } from './wordlist';
 import { BigNumberish } from './bignumber';
 import { Arrayish, Hexable, Signature } from './bytes';
 
+function isUndefinedOrNullOrEmpty(v): boolean {
+    if (v) {
+      if ("string" === typeof (v)) {
+        if (0 < v.length)
+          return false;
+      }
+  
+      return false;
+    }
+    else {
+      if ("number" === typeof (v))
+        return false;
+    }
+  
+    return true;
+  }
+  
 export {
+    isUndefinedOrNullOrEmpty,
+    
     keccak256,
     
-    parseTransaction,
-    serializeTransaction,
+    // parseTransaction,
+    // serializeTransaction,
 
     getNetwork,
 

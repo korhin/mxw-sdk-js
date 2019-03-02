@@ -2,6 +2,18 @@
 
 import { version } from './_version';
 
+// KYC registration is required
+//   - transaction: the transaction attempted
+export const KYC_REQUIRED = 'KYC_REQUIRED';
+
+// Resources not available
+//   - transaction: the transaction attempted
+export const NOT_AVAILABLE = 'NOT_AVAILABLE';
+
+// Resources not registered
+//   - transaction: the transaction attempted
+export const NOT_REGISTERED = 'NOT_REGISTERED';
+
 // Unknown Error
 export const UNKNOWN_ERROR = 'UNKNOWN_ERROR';
 
@@ -142,8 +154,8 @@ export function checkNormalize(): void {
     }
 }
 
-const LogLevels: { [ name: string ]: number } = { debug: 1, "default": 2, info: 2, warn: 3, error: 4, off: 5 };
-let LogLevel = LogLevels["default"];
+const LogLevels: { [ name: string ]: number } = { debug: 1, normal: 2, info: 2, warn: 3, error: 4, off: 5 };
+let LogLevel = LogLevels["normal"];
 
 export function setLogLevel(logLevel: string): void {
     let level = LogLevels[logLevel];
@@ -159,10 +171,22 @@ function log(logLevel: string, args: Array<any>): void {
     console.log.apply(console, args);
 }
 
+export function error(...args: Array<any>): void {
+    log("error", args);
+}
+
 export function warn(...args: Array<any>): void {
     log("warn", args);
 }
 
 export function info(...args: Array<any>): void {
     log("info", args);
+}
+
+export function normal(...args: Array<any>): void {
+    log("normal", args);
+}
+
+export function debug(...args: Array<any>): void {
+    log("debug", args);
 }

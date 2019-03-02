@@ -25,7 +25,7 @@ import {
     Listener,
     BlockId, BlockHeader,
     AccountState,
-    TransactionReceipt, TransactionRequest, TransactionResponse
+    TransactionReceipt, TransactionRequest, TransactionResponse, TransactionFee
 } from './abstract-provider';
 
 import { BigNumberish } from '../utils/bignumber';
@@ -93,6 +93,10 @@ const formatStatus = {
         voting_power: checkNumber
     }
 };
+
+function checkStatus(data: any): Block {
+    return check(formatStatus, data);
+}
 
 const formatBlock = {
     block_meta: {
@@ -171,157 +175,6 @@ const formatBlockHeader = {
 
 function checkBlockHeader(data: any): BlockHeader {
     return check(formatBlockHeader, data);
-}
-
-// @TODO: not any?
-function check(format: any, object: any): any {
-    let result: any = {};
-    for (let key in format) {
-        try {
-            let value = format[key](object[key]);
-            if (value !== undefined) { result[key] = value; }
-        } catch (error) {
-            error.checkKey = key;
-            error.checkValue = object[key];
-            throw error;
-        }
-    }
-    return result;
-}
-
-type CheckFunc = (value: any) => any;
-
-function allowNull(check: CheckFunc, nullValue?: any): CheckFunc {
-    return (function (value: any) {
-        if (value == null) { return nullValue; }
-        return check(value);
-    });
-}
-
-// function allowFalsish(check: CheckFunc, replaceValue: any): CheckFunc {
-//     return (function (value) {
-//         if (!value) { return replaceValue; }
-//         return check(value);
-//     });
-// }
-
-function allowNullOrEmpty(check: CheckFunc, nullValue?: any): CheckFunc {
-    return (function (value: any) {
-        if (value == null || '' === value) { return nullValue; }
-        return check(value);
-    });
-}
-
-function arrayOf(check: CheckFunc): CheckFunc {
-    return (function (array: any): Array<any> {
-        if (!Array.isArray(array)) { throw new Error('not an array'); }
-
-        let result: any = [];
-
-        array.forEach(function (value) {
-            result.push(check(value));
-        });
-
-        return result;
-    });
-}
-
-function checkHash(hash: any, requirePrefix?: boolean): string {
-    if (typeof (hash) === 'string') {
-        // geth-etc does add a "0x" prefix on receipt.root
-        if (!requirePrefix && hash.substring(0, 2) !== '0x') { hash = '0x' + hash; }
-        if (hexDataLength(hash) === 32) {
-            return hash.toLowerCase();
-        }
-    }
-    errors.throwError('invalid hash', errors.INVALID_ARGUMENT, { arg: 'hash', value: hash });
-    return null;
-}
-
-function checkNumber(number: any): number {
-    return bigNumberify(number).toNumber();
-}
-
-// // Returns the difficulty as a number, or if too large (i.e. PoA network) null
-// function checkDifficulty(value: BigNumberish): number {
-//     let v = bigNumberify(value);
-
-//     try {
-//         return v.toNumber();
-//     } catch (error) { }
-
-//     return null;
-// }
-
-function checkBoolean(value: any): boolean {
-    if (typeof (value) === 'boolean') { return value; }
-    if (typeof (value) === 'string') {
-        if (value === 'true') { return true; }
-        if (value === 'false') { return false; }
-    }
-    throw new Error('invaid boolean - ' + value);
-}
-
-function checkUint256(uint256: string): string {
-    if (!isHexString(uint256)) {
-        throw new Error('invalid uint256');
-    }
-    while (uint256.length < 66) {
-        uint256 = '0x0' + uint256.substring(2);
-    }
-    return uint256;
-}
-
-function checkString(string: any): string {
-    if (typeof (string) !== 'string') { throw new Error('invalid string'); }
-    return string;
-}
-
-function checkTimestamp(string: string) {
-    if (typeof (string) !== 'string') { throw new Error('invalid timestanmp'); }
-    return string;
-}
-
-function checkAddress(string: string) {
-    if (typeof (string) !== 'string') { throw new Error('invalid address'); }
-    return string;
-}
-
-function checkHex(string: string) {
-    if (typeof (string) !== 'string' || !isHexString(string)) { throw new Error('invalid hex address'); }
-    return string;
-}
-
-function checkHexAddress(string: string) {
-    if (typeof (string) !== 'string') { throw new Error('invalid hex address'); }
-    return string;
-}
-
-function checkAny(value: any) {
-    return value;
-}
-
-function checkBlockTag(blockTag: BlockTag): string {
-    if (blockTag == null) { return '0'; }
-
-    if (blockTag === 'earliest') { return '0'; }
-
-    if (blockTag === 'latest' || blockTag === 'pending') {
-        return "0";
-    }
-
-    if (isHexString(blockTag)) { return bigNumberify(blockTag).toString(); }
-
-    try {
-        if ('string' === typeof blockTag)
-            return parseInt(blockTag).toString();
-
-        return blockTag.toString();
-    }
-    catch (error) {
-    }
-
-    throw new Error('invalid blockTag');
 }
 
 const formatTransaction = {
@@ -875,10 +728,10 @@ export class BaseProvider extends Provider {
         });
     }
 
-    getGasPrice(): Promise<BigNumber> {
+    getTransactionFee(): Promise<TransactionFee> {
         return this.ready.then(() => {
-            return this.perform('getGasPrice', {}).then((result) => {
-                return bigNumberify(result);
+            return this.perform('getTransactionFee', {}).then((result) => {
+                return result;
             });
         });
     }
@@ -886,7 +739,7 @@ export class BaseProvider extends Provider {
     getStatus(): Promise<any> {
         return this.ready.then(() => {
             return this.perform('getStatus', {}).then((result) => {
-                return check(formatStatus, result);
+                return checkStatus(result);
             });
         });
     }
@@ -947,42 +800,12 @@ export class BaseProvider extends Provider {
         });
     }
 
-    getCode(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> {
-        return this.ready.then(() => {
-            return resolveProperties({ addressOrName: addressOrName, blockTag: blockTag }).then(({ addressOrName, blockTag }) => {
-                return this.resolveName(addressOrName).then((address) => {
-                    let params = { address: address, blockTag: checkBlockTag(blockTag) };
-                    return this.perform('getCode', params).then((result) => {
-                        return hexlify(result);
-                    });
-                });
-            });
-        });
-    }
-
-    getStorageAt(addressOrName: string | Promise<string>, position: BigNumberish | Promise<BigNumberish>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string> {
-        return this.ready.then(() => {
-            return resolveProperties({ addressOrName: addressOrName, position: position, blockTag: blockTag }).then(({ addressOrName, position, blockTag }) => {
-                return this.resolveName(addressOrName).then((address) => {
-                    let params = {
-                        address: address,
-                        blockTag: checkBlockTag(blockTag),
-                        position: hexStripZeros(hexlify(position)),
-                    };
-                    return this.perform('getStorageAt', params).then((result) => {
-                        return hexlify(result);
-                    });
-                });
-            });
-        });
-    }
-
     sendTransaction(signedTransaction: string | Promise<string>): Promise<TransactionResponse> {
         return this.ready.then(() => {
             return resolveProperties({ signedTransaction: signedTransaction }).then(({ signedTransaction }) => {
-                let params = { signedTransaction: hexlify(signedTransaction) };
-                return this.perform('sendTransaction', params).then((hash) => {
-                    return this._wrapTransaction(parseTransaction(signedTransaction), hash);
+                let params = { signedTransaction: signedTransaction };
+                return this.perform('sendTransaction', params).then((result) => {
+                    return this._wrapTransaction(parseTransaction(signedTransaction), "0x" + result.hash);
                 }, function (error) {
                     error.transaction = parseTransaction(signedTransaction);
                     if (error.transaction.hash) {
@@ -996,7 +819,11 @@ export class BaseProvider extends Provider {
 
     // This should be called by any subclass wrapping a TransactionResponse
     _wrapTransaction(tx: Transaction, hash?: string): TransactionResponse {
-        if (hash != null && hexDataLength(hash) !== 32) { throw new Error('invalid response - sendTransaction'); }
+        if (hash != null && hexDataLength(hash) !== 32) {
+            errors.throwError('invalid response - sendTransaction', errors.INVALID_ARGUMENT, { expectedHash: tx.hash, returnedHash: hash });
+        }
+
+        hash = hash.toLowerCase();
 
         let result: TransactionResponse = <TransactionResponse>tx;
 
@@ -1047,24 +874,6 @@ export class BaseProvider extends Provider {
     //         });
     //     });
     // }
-
-    estimateGas(transaction: TransactionRequest) {
-        // TODO
-        let tx: TransactionRequest = {
-            from: transaction.from
-        };
-
-        return this.ready.then(() => {
-            return resolveProperties(tx).then((tx) => {
-                return this._resolveNames(tx, ['to', 'from']).then((tx) => {
-                    let params = { transaction: checkTransactionRequest(tx) };
-                    return this.perform('estimateGas', params).then((result) => {
-                        return bigNumberify(result);
-                    });
-                });
-            });
-        });
-    }
 
     getBlock(blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>, includeTransactions?: boolean): Promise<Block> {
         return this.ready.then(() => {
@@ -1221,7 +1030,7 @@ export class BaseProvider extends Provider {
             // If it is a promise, resolve it then recurse
             if (addressOrName instanceof Promise) {
                 return addressOrName.then((address) => {
-                    return this.resolveName(address, blockTag);
+                    return this.isWhitelisted(address, blockTag);
                 });
             }
 
@@ -1398,6 +1207,151 @@ export class BaseProvider extends Provider {
         return this;
     }
 
+}
+
+// @TODO: not any?
+function check(format: any, object: any): any {
+    let result: any = {};
+    for (let key in format) {
+        try {
+            if ('function' !== typeof (format[key]))
+                result[key] = check(format[key], object[key]);
+            else {
+                let value = format[key](object[key]);
+                if (value !== undefined) { result[key] = value; }
+            }
+        } catch (error) {
+            error.checkKey = key;
+            error.checkValue = object[key];
+            throw error;
+        }
+    }
+    return result;
+}
+
+type CheckFunc = (value: any) => any;
+
+function allowNull(check: CheckFunc, nullValue?: any): CheckFunc {
+    return (function (value: any) {
+        if (value == null) { return nullValue; }
+        return check(value);
+    });
+}
+
+function allowNullOrEmpty(check: CheckFunc, nullValue?: any): CheckFunc {
+    return (function (value: any) {
+        if (value == null || '' === value) { return nullValue; }
+        return check(value);
+    });
+}
+
+function arrayOf(check: CheckFunc): CheckFunc {
+    return (function (array: any): Array<any> {
+        if (!Array.isArray(array)) { throw new Error('not an array'); }
+
+        let result: any = [];
+
+        array.forEach(function (value) {
+            result.push(check(value));
+        });
+
+        return result;
+    });
+}
+
+function checkHash(hash: any, requirePrefix?: boolean): string {
+    if (typeof (hash) === 'string') {
+        // geth-etc does add a "0x" prefix on receipt.root
+        if (!requirePrefix && hash.substring(0, 2) !== '0x') { hash = '0x' + hash; }
+        if (hexDataLength(hash) === 32) {
+            return hash.toLowerCase();
+        }
+    }
+    errors.throwError('invalid hash', errors.INVALID_ARGUMENT, { arg: 'hash', value: hash });
+    return null;
+}
+
+function checkNumber(number: any): number {
+    return bigNumberify(number).toNumber();
+}
+
+function checkBoolean(value: any): boolean {
+    if (typeof (value) === 'boolean') { return value; }
+    if (typeof (value) === 'string') {
+        if (value === 'true') { return true; }
+        if (value === 'false') { return false; }
+    }
+    throw new Error('invaid boolean - ' + value);
+}
+
+function checkUint256(uint256: string): string {
+    if (!isHexString(uint256)) {
+        throw new Error('invalid uint256');
+    }
+    while (uint256.length < 66) {
+        uint256 = '0x0' + uint256.substring(2);
+    }
+    return uint256;
+}
+
+function checkString(string: any): string {
+    if (typeof (string) !== 'string') { throw new Error('invalid string'); }
+    return string;
+}
+
+function checkTimestamp(string: string) {
+    if (typeof (string) !== 'string') { throw new Error('invalid timestanmp'); }
+    return string;
+}
+
+function checkAddress(string: string) {
+    if (typeof (string) !== 'string') { throw new Error('invalid address'); }
+    return string;
+}
+
+function checkHex(string: string) {
+    if (typeof (string) === 'string') {
+        if (!string.startsWith("0x")) string = "0x" + string;
+        if (isHexString(string))
+            return string;
+    }
+    return errors.throwError('invalid hex', errors.INVALID_ARGUMENT, { argument: 'hex', value: string });
+}
+
+function checkHexAddress(string: string) {
+    if (typeof (string) === 'string') {
+        if (!string.startsWith("0x")) string = "0x" + string;
+        if (isHexString(string))
+            return string;
+    }
+    return errors.throwError('invalid hex address', errors.INVALID_ARGUMENT, { argument: 'address', value: string });
+}
+
+function checkAny(value: any) {
+    return value;
+}
+
+function checkBlockTag(blockTag: BlockTag): string {
+    if (blockTag == null) { return '0'; }
+
+    if (blockTag === 'earliest') { return '0'; }
+
+    if (blockTag === 'latest' || blockTag === 'pending') {
+        return "0";
+    }
+
+    if (isHexString(blockTag)) { return bigNumberify(blockTag).toString(); }
+
+    try {
+        if ('string' === typeof blockTag)
+            return parseInt(blockTag).toString();
+
+        return blockTag.toString();
+    }
+    catch (error) {
+    }
+
+    throw new Error('invalid blockTag');
 }
 
 defineReadOnly(Provider, 'inherits', inheritable(Provider));

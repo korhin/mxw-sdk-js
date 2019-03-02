@@ -9,6 +9,7 @@ import * as errors from '../errors';
 // Imported Types
 
 import { Arrayish } from './bytes';
+import { encode as base64Encode, decode as base64Decode } from './base64';
 
 ///////////////////////////////
 // Exported Types
@@ -38,7 +39,7 @@ export function isHexable(value: any): value is Hexable {
 function addSlice(array: Uint8Array): Uint8Array {
     if (array.slice) { return array; }
 
-    array.slice = function() {
+    array.slice = function () {
         var args = Array.prototype.slice.call(arguments);
         return addSlice(new Uint8Array(Array.prototype.slice.apply(array, args)));
     }
@@ -47,7 +48,7 @@ function addSlice(array: Uint8Array): Uint8Array {
 }
 
 export function isArrayish(value: any): value is Arrayish {
-    if (!value || parseInt(String(value.length)) != value.length || typeof(value) === 'string') {
+    if (!value || parseInt(String(value.length)) != value.length || typeof (value) === 'string') {
         return false;
     }
 
@@ -70,33 +71,34 @@ export function arrayify(value: Arrayish | Hexable): Uint8Array {
         value = value.toHexString();
     }
 
-    if (typeof(value) === 'string') {
+    if (typeof (value) === 'string') {
         let match = value.match(/^(0x)?[0-9a-fA-F]*$/);
 
         if (!match) {
-            errors.throwError('invalid hexidecimal string', errors.INVALID_ARGUMENT, { arg: 'value', value: value });
+            return addSlice(base64Decode(value));
         }
+        else {
+            if (match[1] !== '0x') {
+                errors.throwError('hex string must have 0x prefix', errors.INVALID_ARGUMENT, { arg: 'value', value: value });
+            }
 
-        if (match[1] !== '0x') {
-             errors.throwError('hex string must have 0x prefix', errors.INVALID_ARGUMENT, { arg: 'value', value: value });
+            value = value.substring(2);
+            if (value.length % 2) { value = '0' + value; }
+
+            var result = [];
+            for (var i = 0; i < value.length; i += 2) {
+                result.push(parseInt(value.substr(i, 2), 16));
+            }
+
+            return addSlice(new Uint8Array(result));
         }
-
-        value = value.substring(2);
-        if (value.length % 2) { value = '0' + value; }
-
-        var result = [];
-        for (var i = 0; i < value.length; i += 2) {
-            result.push(parseInt(value.substr(i, 2), 16));
-        }
-
-        return addSlice(new Uint8Array(result));
     }
 
     if (isArrayish(value)) {
         return addSlice(new Uint8Array(value));
     }
 
-    errors.throwError('invalid arrayify value', null, { arg: 'value', value: value, type: typeof(value) });
+    errors.throwError('invalid arrayify value', null, { arg: 'value', value: value, type: typeof (value) });
     return null;
 }
 
@@ -148,7 +150,7 @@ export function padZeros(value: Arrayish, length: number): Uint8Array {
 
 
 export function isHexString(value: any, length?: number): boolean {
-    if (typeof(value) !== 'string' || !value.match(/^0x[0-9A-Fa-f]*$/)) {
+    if (typeof (value) !== 'string' || !value.match(/^0x[0-9A-Fa-f]*$/)) {
         return false
     }
     if (length && value.length !== 2 + 2 * length) { return false; }
@@ -163,7 +165,7 @@ export function hexlify(value: Arrayish | Hexable | number): string {
         return value.toHexString();
     }
 
-    if (typeof(value) === 'number') {
+    if (typeof (value) === 'number') {
         if (value < 0) {
             errors.throwError('cannot hexlify negative value', errors.INVALID_ARGUMENT, { arg: 'value', value: value });
         }
@@ -191,7 +193,7 @@ export function hexlify(value: Arrayish | Hexable | number): string {
         return '0x00';
     }
 
-    if (typeof(value) === 'string') {
+    if (typeof (value) === 'string') {
         let match = value.match(/^(0x)?[0-9a-fA-F]*$/);
 
         if (!match) {
@@ -199,7 +201,7 @@ export function hexlify(value: Arrayish | Hexable | number): string {
         }
 
         if (match[1] !== '0x') {
-             errors.throwError('hex string must have 0x prefix', errors.INVALID_ARGUMENT, { arg: 'value', value: value });
+            errors.throwError('hex string must have 0x prefix', errors.INVALID_ARGUMENT, { arg: 'value', value: value });
         }
 
         if (value.length % 2) {
@@ -211,8 +213,8 @@ export function hexlify(value: Arrayish | Hexable | number): string {
     if (isArrayish(value)) {
         var result = [];
         for (var i = 0; i < value.length; i++) {
-             var v = value[i];
-             result.push(HexCharacters[(v & 0xf0) >> 4] + HexCharacters[v & 0x0f]);
+            var v = value[i];
+            result.push(HexCharacters[(v & 0xf0) >> 4] + HexCharacters[v & 0x0f]);
         }
         return '0x' + result.join('');
     }
@@ -281,7 +283,7 @@ export function splitSignature(signature: Arrayish | Signature): Signature {
         s = hexZeroPad(signature.s, 32);
 
         v = signature.v;
-        if (typeof(v) === 'string') { v = parseInt(v, 16); }
+        if (typeof (v) === 'string') { v = parseInt(v, 16); }
 
         let recoveryParam = signature.recoveryParam;
         if (recoveryParam == null && signature.v != null) {
@@ -314,10 +316,10 @@ export function splitSignature(signature: Arrayish | Signature): Signature {
 export function joinSignature(signature: Signature): string {
     signature = splitSignature(signature);
 
-    return hexlify(concat([
-         signature.r,
-         signature.s,
-         (signature.recoveryParam ? '0x1c': '0x1b')
+    return base64Encode(concat([
+        signature.r,
+        signature.s,
+        // (signature.recoveryParam ? '0x1c' : '0x1b')
     ]));
 }
 

@@ -13,10 +13,10 @@
     "build-min": "browserify ./src/index.js | uglifyjs -c -m --rename --toplevel --source-map -o ./src/index.min.js",
     "build-webpack": "webpack",
     "clean": "rm -rf ./dist",
-    "dist-test": "npm run build && mocha -r ts-node/register tests/test-*.ts",
-    "dist-test-provider": "npm run build && mocha -r ts-node/register tests/test-provider.ts",
-    "dist-test-wallet": "npm run build && mocha -r ts-node/register tests/test-wallet.ts",
-    "test": "mocha -r ts-node/register tests/test-*.ts"
+    "dist-test": "npm run build && mocha --timeout 30000 -r ts-node/register tests/test-*.ts",
+    "dist-test-provider": "npm run build && mocha --timeout 30000 -r ts-node/register tests/test-provider.ts",
+    "dist-test-wallet": "npm run build && mocha --timeout 30000 -r ts-node/register tests/test-wallet.ts",
+    "test": "mocha --timeout 30000 -r ts-node/register tests/test-*.ts"
   },
   "author": "Jean Soon <jeansoon@mxw.one>",
   "license": "ISC",

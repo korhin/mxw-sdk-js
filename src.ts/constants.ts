@@ -7,6 +7,16 @@ const AddressPrefix = 'mxw';
 const AddressZero = '0x0000000000000000000000000000000000000000';
 const HashZero = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
+const ZeroFee = {
+    amount: [
+        {
+            amount: '0',
+            denom: ''
+        },
+    ],
+    gas: '200000'
+}
+
 // NFKD (decomposed)
 //const EtherSymbol = '\uD835\uDF63';
 
@@ -21,6 +31,8 @@ const WeiPerEther: BigNumber = bigNumberify('1000000000000000000');
 const MaxUint256: BigNumber = bigNumberify('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
 
 export {
+    ZeroFee,
+    
     AddressPrefix,
 
     AddressZero,

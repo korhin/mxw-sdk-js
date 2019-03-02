@@ -12,8 +12,8 @@ import { getAddress } from '../utils/address';
 import { BigNumber } from '../utils/bignumber';
 import { hexlify, hexStripZeros } from '../utils/bytes';
 import { getNetwork } from '../utils/networks';
-import { checkProperties, defineReadOnly, shallowCopy } from '../utils/properties';
-import { toUtf8Bytes, toUtf8String } from '../utils/utf8';
+import { checkProperties, resolveProperties, defineReadOnly, shallowCopy } from '../utils/properties';
+import { toUtf8String } from '../utils/utf8';
 import { fetchJson, } from '../utils/web';
 import { decode as base64Decode } from '../utils/base64';
 import { encode as bech32Encode, toWords as bech32ToWords } from '../utils/bech32';
@@ -22,9 +22,9 @@ import { computeHexAddress } from '../utils/secp256k1';
 // Imported Types
 import { Arrayish } from '../utils/bytes';
 import { Network, Networkish } from '../utils/networks';
-import { ConnectionInfo } from '../utils/web';
+import { ConnectionInfo, poll } from '../utils/web';
 
-import { BlockTag, TransactionRequest } from '../providers/abstract-provider';
+import { BlockTag, TransactionRequest, TransactionResponse, TransactionFee } from '../providers/abstract-provider';
 import { AddressPrefix } from '../constants';
 
 // function timer(timeout: number): Promise<any> {
@@ -103,77 +103,64 @@ export class JsonRpcSigner extends Signer {
         return this.provider.lookupAddress(address);
     }
 
-    // sendUncheckedTransaction(transaction: TransactionRequest): Promise<string> {
-    //     transaction = shallowCopy(transaction);
+    sendUncheckedTransaction(transaction: TransactionRequest): Promise<string> {
+        transaction = shallowCopy(transaction);
 
-    //     let fromAddress = this.getAddress().then((address) => {
-    //         if (address) { address = address.toLowerCase(); }
-    //         return address;
-    //     });
+        let fromAddress = this.getAddress().then((address) => {
+            if (address) { address = address.toLowerCase(); }
+            return address;
+        });
 
-    //     // The JSON-RPC for eth_sendTransaction uses 90000 gas; if the user
-    //     // wishes to use this, it is easy to specify explicitly, otherwise
-    //     // we look it up for them.
-    //     if (transaction.gasLimit == null) {
-    //         let estimate = shallowCopy(transaction);
-    //         estimate.from = fromAddress;
-    //         transaction.gasLimit = this.provider.estimateGas(estimate);
-    //     }
+        return Promise.all([
+            resolveProperties(transaction),
+            fromAddress
+        ]).then((results) => {
+            let tx = results[0];
+            let hexTx = JsonRpcProvider.hexlifyTransaction(tx);
+            hexTx.from = results[1];
+            return this.provider.send('sendTransaction', [hexTx]).then((hash) => {
+                return hash;
+            }, (error) => {
+                if (error.responseText) {
+                    // See: JsonRpcProvider.sendTransaction (@TODO: Expose a ._throwError??)
+                    if (error.responseText.indexOf('insufficient funds') >= 0) {
+                        errors.throwError('insufficient funds', errors.INSUFFICIENT_FUNDS, {
+                            transaction: tx
+                        });
+                    }
+                    if (error.responseText.indexOf('nonce too low') >= 0) {
+                        errors.throwError('nonce has already been used', errors.NONCE_EXPIRED, {
+                            transaction: tx
+                        });
+                    }
+                    if (error.responseText.indexOf('replacement transaction underpriced') >= 0) {
+                        errors.throwError('replacement fee too low', errors.REPLACEMENT_UNDERPRICED, {
+                            transaction: tx
+                        });
+                    }
+                }
+                throw error;
+            });
+        });
+    }
 
-    //     return Promise.all([
-    //         resolveProperties(transaction),
-    //         fromAddress
-    //     ]).then((results) => {
-    //         let tx = results[0];
-    //         let hexTx = JsonRpcProvider.hexlifyTransaction(tx);
-    //         hexTx.from = results[1];
-    //         return this.provider.send('eth_sendTransaction', [hexTx]).then((hash) => {
-    //             return hash;
-    //         }, (error) => {
-    //             if (error.responseText) {
-    //                 // See: JsonRpcProvider.sendTransaction (@TODO: Expose a ._throwError??)
-    //                 if (error.responseText.indexOf('insufficient funds') >= 0) {
-    //                     errors.throwError('insufficient funds', errors.INSUFFICIENT_FUNDS, {
-    //                         transaction: tx
-    //                     });
-    //                 }
-    //                 if (error.responseText.indexOf('nonce too low') >= 0) {
-    //                     errors.throwError('nonce has already been used', errors.NONCE_EXPIRED, {
-    //                         transaction: tx
-    //                     });
-    //                 }
-    //                 if (error.responseText.indexOf('replacement transaction underpriced') >= 0) {
-    //                     errors.throwError('replacement fee too low', errors.REPLACEMENT_UNDERPRICED, {
-    //                         transaction: tx
-    //                     });
-    //                 }
-    //             }
-    //             throw error;
-    //         });
-    //     });
-    // }
-
-    // sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse> {
-    //     return this.sendUncheckedTransaction(transaction).then((hash) => {
-    //         return poll(() => {
-    //             return this.provider.getTransaction(hash).then((tx: TransactionResponse) => {
-    //                 if (tx === null) { return undefined; }
-    //                 return this.provider._wrapTransaction(tx, hash);
-    //             });
-    //         }, { onceBlock: this.provider }).catch((error: Error) => {
-    //             (<any>error).transactionHash = hash;
-    //             throw error;
-    //         });
-    //     });
-    // }
+    sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse> {
+        return this.sendUncheckedTransaction(transaction).then((hash) => {
+            return poll(() => {
+                return this.provider.getTransaction(hash).then((tx: TransactionResponse) => {
+                    if (tx === null) { return undefined; }
+                    return this.provider._wrapTransaction(tx, hash);
+                });
+            }, { onceBlock: this.provider }).catch((error: Error) => {
+                (<any>error).transactionHash = hash;
+                throw error;
+            });
+        });
+    }
 
     signMessage(message: Arrayish | string): Promise<string> {
-        let data = ((typeof (message) === 'string') ? toUtf8Bytes(message) : message);
-        return this.getAddress().then((address) => {
-
-            // https://github.com/ethereum/wiki/wiki/JSON-RPC#eth_sign
-            return this.provider.send('eth_sign', [address.toLowerCase(), hexlify(data)]);
-        });
+        let method = "signMessage";
+        return errors.throwError(method + ' not implemented', errors.NOT_IMPLEMENTED, { operation: method });
     }
 }
 
@@ -218,7 +205,7 @@ export class JsonRpcProvider extends BaseProvider {
         errors.checkNew(this, JsonRpcProvider);
 
         // Default URL
-        if (!url) { url = 'http://localhost:8545'; }
+        if (!url) { url = 'http://localhost:26657'; }
 
         if (typeof (url) === 'string') {
             this.connection = {
@@ -255,6 +242,37 @@ export class JsonRpcProvider extends BaseProvider {
 
     perform(method: string, params: any): Promise<any> {
         switch (method) {
+            case 'sendTransaction':
+                return this.send('broadcast_tx_commit', [params.signedTransaction]).then((result) => {
+                    if (result.deliver_tx && result.deliver_tx.log) {
+                        try {
+                            let logs = JSON.parse(result.deliver_tx.log);
+                            if (0 < logs.length) {
+                                if (logs[0].success)
+                                    return result;
+                            }
+                        }
+                        catch (error) {
+                            return errors.throwError(method + ' invalid json response', errors.INVALID_ARGUMENT, { operation: method, response: result });
+                        }
+                    }
+
+                    throw result;
+
+                }).catch((error) => {
+                    if (error.check_tx && error.check_tx.log) {
+                        // "KYC registration is required"
+                        if (0 < error.check_tx.log.indexOf('all signers must pass kyc')) {
+                            errors.throwError('KYC registration is required', errors.KYC_REQUIRED, { operation: method, response: error });
+                        }
+                        // insufficient funds to pay for fees
+                        if (0 < error.check_tx.log.indexOf('insufficient funds to pay for fees')) {
+                            errors.throwError('insufficient funds for fees', errors.INSUFFICIENT_FUNDS, { operation: method, response: error });
+                        }
+                    }
+                    throw error;
+                });
+
             case 'isWhitelisted':
                 return this.send('abci_query', ["/custom/kyc/is_whitelisted/" + params.address, "", params.blockTag, null]).then(result => {
                     if (result && result.response) {
@@ -277,6 +295,18 @@ export class JsonRpcProvider extends BaseProvider {
 
             case 'getStatus':
                 return this.send('status', []);
+
+            case 'getTransactionFee':
+                // TODO: To be confirmed
+                return Promise.resolve(<TransactionFee>{
+                    amount: [
+                        {
+                            amount: '100000000',
+                            denom: 'siu',
+                        },
+                    ],
+                    gas: '200000'
+                });
 
             case 'getAccountState':
                 return this.send('abci_query', ["/store/acc/key", getLowerCase('01' + computeHexAddress(params.address).substring(2)), params.blockTag, null]).then(result => {
@@ -308,8 +338,12 @@ export class JsonRpcProvider extends BaseProvider {
                             }
                         }
                         else {
-                            if (6 /* could not resolve name */ == result.response.code)
-                                return undefined;
+                            switch (result.response.code) {
+                                case 6: // could not resolve name
+                                    return errors.throwError('could not resolve name', errors.NOT_AVAILABLE, { operation: method, response: result });
+                                case 7: // name not set
+                                    return errors.throwError('name is not registered', errors.NOT_REGISTERED, { operation: method, response: result });
+                            }
                         }
                     }
 
@@ -328,32 +362,17 @@ export class JsonRpcProvider extends BaseProvider {
                             }
                         }
                         else {
-                            if (7 /* address not set */ == result.response.code)
-                                return undefined;
+                            switch (result.response.code) {
+                                case 6: // could not resolve address
+                                    return errors.throwError('could not resolve address', errors.NOT_AVAILABLE, { operation: method, response: result });
+                                case 7: // address not set
+                                    return errors.throwError('name is not registered', errors.NOT_REGISTERED, { operation: method, response: result });
+                            }
                         }
                     }
 
                     return errors.throwError(method + ' invalid json response', errors.INVALID_ARGUMENT, { operation: method, response: result });
                 });
-
-            // case 'sendTransaction':
-            //     return this.send('eth_sendRawTransaction', [params.signedTransaction]).catch((error) => {
-            //         if (error.responseText) {
-            //             // "insufficient funds for gas * price + value"
-            //             if (error.responseText.indexOf('insufficient funds') > 0) {
-            //                 errors.throwError('insufficient funds', errors.INSUFFICIENT_FUNDS, {});
-            //             }
-            //             // "nonce too low"
-            //             if (error.responseText.indexOf('nonce too low') > 0) {
-            //                 errors.throwError('nonce has already been used', errors.NONCE_EXPIRED, {});
-            //             }
-            //             // "replacement transaction underpriced"
-            //             if (error.responseText.indexOf('replacement transaction underpriced') > 0) {
-            //                 errors.throwError('replacement fee too low', errors.REPLACEMENT_UNDERPRICED, {});
-            //             }
-            //         }
-            //         throw error;
-            //     });
 
             case 'getBlock':
                 return this.send('block', [params.blockTag]);
@@ -431,7 +450,7 @@ export class JsonRpcProvider extends BaseProvider {
     //     this._pendingFilter = null;
     // }
 
-    // Convert an mxw.js transaction into a JSON-RPC transaction
+    // Convert transaction into a JSON-RPC transaction
     //  - gasLimit => gas
     //  - All values hexlified
     //  - All numeric values zero-striped
@@ -450,18 +469,20 @@ export class JsonRpcProvider extends BaseProvider {
 
         let result: { [key: string]: string } = {};
 
-        // Some nodes (INFURA ropsten; INFURA mainnet is fine) don't like leading zeros.
-        ['gasLimit', 'gasPrice', 'nonce', 'value'].forEach(function (key) {
-            if ((<any>transaction)[key] == null) { return; }
-            let value = hexStripZeros(hexlify((<any>transaction)[key]));
-            if (key === 'gasLimit') { key = 'gas'; }
-            result[key] = value;
-        });
+        // TODO
 
-        ['from', 'to', 'data'].forEach(function (key) {
-            if ((<any>transaction)[key] == null) { return; }
-            result[key] = hexlify((<any>transaction)[key]);
-        });
+        // // Some nodes (INFURA ropsten; INFURA mainnet is fine) don't like leading zeros.
+        // ['gasLimit', 'gasPrice', 'nonce', 'value'].forEach(function (key) {
+        //     if ((<any>transaction)[key] == null) { return; }
+        //     let value = hexStripZeros(hexlify((<any>transaction)[key]));
+        //     if (key === 'gasLimit') { key = 'gas'; }
+        //     result[key] = value;
+        // });
+
+        // ['id', 'to', 'data'].forEach(function (key) {
+        //     if ((<any>transaction)[key] == null) { return; }
+        //     result[key] = hexlify((<any>transaction)[key]);
+        // });
 
         return result;
     }

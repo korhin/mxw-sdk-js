@@ -134,32 +134,47 @@ export interface TransactionReceipt {
     status?: number
 };
 
+export type TransactionFee = {
+    amount: Array<{ denom: string, amount: BigNumberish }>,
+    gas: BigNumberish
+};
+
+export type TransactionSignature = {
+    publicKey: {
+        type: string,
+        value: string
+    },
+    signature: string
+};
+
 export type TransactionRequest = {
-    to?: string | Promise<string>,
-    from?: string | Promise<string>,
+    type?: string,
+    value?: {
+        msg?: Array<{ type: string, value: any }>,
+        fee?: TransactionFee | Promise<TransactionFee>,
+        signatures?: Array<TransactionSignature>,
+        memo?: string
+    },
     nonce?: BigNumberish | Promise<BigNumberish>,
-
-    gasLimit?: BigNumberish | Promise<BigNumberish>,
-    gasPrice?: BigNumberish | Promise<BigNumberish>,
-
-    data?: Arrayish | Promise<Arrayish>,
-    value?: BigNumberish | Promise<BigNumberish>,
-    chainId?: number | Promise<number>,
+    chainId?: string | Promise<string>,
+    fee?: TransactionFee | Promise<TransactionFee>
 };
 
 export interface TransactionResponse extends Transaction {
-    // Only if a transaction has been mined
+    checkTransaction: {
+        gasWanted?: BigNumberish,
+        gasUsed?: BigNumberish
+    },
+    deliverTransaction: {
+        log?: string;
+        gasWanted?: BigNumberish,
+        gasUsed?: BigNumberish,
+        tags?: Array<{ key: string; value: string }>
+    },
+    hash: string;
     blockNumber?: number,
-    blockHash?: string,
-    timestamp?: number,
 
     confirmations: number,
-
-    // Not optional (as it is in Transaction)
-    from: string;
-
-    // The raw transaction
-    raw?: string,
 
     // This function waits until the transaction has been mined
     wait: (confirmations?: number) => Promise<TransactionReceipt>
@@ -176,6 +191,7 @@ export abstract class Provider implements OnceBlockable {
     abstract getNetwork(): Promise<Network>;
 
     abstract getBlockNumber(): Promise<number>;
+    abstract getTransactionFee(): Promise<TransactionFee>;
 
     abstract getStatus(): Promise<Status>;
     abstract getAccountState(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<AccountState>;
@@ -183,21 +199,19 @@ export abstract class Provider implements OnceBlockable {
     abstract getBalance(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber>;
 
     abstract getTransactionCount(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<BigNumber>;
-    // abstract getCode(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
-    // abstract getStorageAt(addressOrName: string | Promise<string>, position: BigNumberish | Promise<BigNumberish>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
 
     abstract sendTransaction(signedTransaction: string | Promise<string>): Promise<TransactionResponse>;
     // abstract call(transaction: TransactionRequest, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
-    abstract estimateGas(transaction: TransactionRequest): Promise<BigNumber>;
+    // abstract estimateGas(transaction: TransactionRequest): Promise<BigNumber>;
 
     // abstract getBlock(blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>, includeTransactions?: boolean): Promise<Block>;
-    // abstract getTransaction(transactionHash: string): Promise<TransactionResponse>;
+    abstract getTransaction(transactionHash: string): Promise<TransactionResponse>;
     // abstract getTransactionReceipt(transactionHash: string): Promise<TransactionReceipt>;
 
     // abstract getLogs(filter: Filter | FilterByBlock): Promise<Array<Log>>;
 
-    abstract isWhitelisted(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
-    
+    abstract isWhitelisted(addressOrName: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<boolean>;
+
     abstract resolveName(name: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
     abstract lookupAddress(address: string | Promise<string>, blockTag?: BlockTag | Promise<BlockTag>): Promise<string>;
     abstract on(eventName: EventType, listener: Listener): Provider;
