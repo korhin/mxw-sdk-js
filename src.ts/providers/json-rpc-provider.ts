@@ -269,6 +269,10 @@ export class JsonRpcProvider extends BaseProvider {
                         if (0 < error.check_tx.log.indexOf('insufficient funds to pay for fees')) {
                             errors.throwError('insufficient funds for fees', errors.INSUFFICIENT_FUNDS, { operation: method, response: error });
                         }
+                        // "Account has enough tokens"
+                        if (0 < error.check_tx.log.indexOf('Account has enough tokens')) {
+                            errors.throwError('faucet is not allowed', errors.KYC_REQUIRED, { operation: method, response: error });
+                        }
                     }
                     throw error;
                 });

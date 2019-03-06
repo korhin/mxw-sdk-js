@@ -1,6 +1,6 @@
 {
   "name": "@jeansoon/mxw",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "Maxonrow blockchain library",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

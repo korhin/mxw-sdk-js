@@ -54,10 +54,10 @@ export class KeyPair {
         let keyPair = getCurve().keyFromPrivate(arrayify(this.privateKey));
         let signature = keyPair.sign(arrayify(digest), {canonical: true});
         return {
-            recoveryParam: signature.recoveryParam,
+            // recoveryParam: signature.recoveryParam,
             r: hexZeroPad('0x' + signature.r.toString(16), 32),
             s: hexZeroPad('0x' + signature.s.toString(16), 32),
-            v: 27 + signature.recoveryParam
+            // v: 27 + signature.recoveryParam
         }
 
     }

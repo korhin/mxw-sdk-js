@@ -105,7 +105,7 @@ export class Wallet extends AbstractSigner {
                     sequence: '0'
                 }
 
-                // This is a hacks!! It should be copy exactly from tx.value.msg
+                // This is a hacks!! Signature generation should be standardized
                 if (tx.value.msg) {
                     for (let msg of tx.value.msg) {
                         if ("cosmos-sdk/Send" !== msg.type) {
@@ -251,8 +251,8 @@ export class Wallet extends AbstractSigner {
                     {
                         type: "nameservice/SetAlias",
                         value: {
-                            owner: this.address,
                             alias: name,
+                            owner: this.address,
                         }
                     }
                 ],
@@ -349,6 +349,11 @@ export class Wallet extends AbstractSigner {
 
             return secretStorage.decrypt(json, password, progressCallback).then(function (signingKey) {
                 return new Wallet(signingKey);
+            }).catch(error => {
+                if ("invalid password" == error.message)
+                    errors.throwError('invalid password', errors.INVALID_PASSWORD, { });
+
+                throw error;
             });
         }
 

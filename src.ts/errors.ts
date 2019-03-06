@@ -14,6 +14,9 @@ export const NOT_AVAILABLE = 'NOT_AVAILABLE';
 //   - transaction: the transaction attempted
 export const NOT_REGISTERED = 'NOT_REGISTERED';
 
+// Invalid password
+export const INVALID_PASSWORD = 'INVALID_PASSWORD';
+
 // Unknown Error
 export const UNKNOWN_ERROR = 'UNKNOWN_ERROR';
 

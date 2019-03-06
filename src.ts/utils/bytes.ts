@@ -276,40 +276,24 @@ export function splitSignature(signature: Arrayish | Signature): Signature {
     let r = '0x', s = '0x';
 
     if (isSignature(signature)) {
-        if (signature.v == null && signature.recoveryParam == null) {
-            errors.throwError('at least on of recoveryParam or v must be specified', errors.INVALID_ARGUMENT, { argument: 'signature', value: signature });
-        }
         r = hexZeroPad(signature.r, 32);
         s = hexZeroPad(signature.s, 32);
 
-        v = signature.v;
-        if (typeof (v) === 'string') { v = parseInt(v, 16); }
-
-        let recoveryParam = signature.recoveryParam;
-        if (recoveryParam == null && signature.v != null) {
-            recoveryParam = 1 - (v % 2);
-        }
-        v = 27 + recoveryParam;
-
     } else {
         let bytes: Uint8Array = arrayify(signature);
-        if (bytes.length !== 65) {
-            throw new Error('invalid signature');
+        if (bytes.length !== 64) {
+            errors.throwError('invalid signature', errors.INVALID_ARGUMENT, { argument: 'signature', value: signature });
+            // throw new Error('invalid signature');
         }
         r = hexlify(bytes.slice(0, 32));
         s = hexlify(bytes.slice(32, 64));
-
-        v = bytes[64];
-        if (v !== 27 && v !== 28) {
-            v = 27 + (v % 2);
-        }
     }
 
     return {
         r: r,
         s: s,
-        recoveryParam: (v - 27),
-        v: v
+        recoveryParam: 0,
+        v: 27
     }
 }
 
@@ -318,8 +302,7 @@ export function joinSignature(signature: Signature): string {
 
     return base64Encode(concat([
         signature.r,
-        signature.s,
-        // (signature.recoveryParam ? '0x1c' : '0x1b')
+        signature.s
     ]));
 }
 

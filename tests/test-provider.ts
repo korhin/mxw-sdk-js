@@ -25,7 +25,7 @@ describe('Suite: Provider', function () {
     });
 
     it("Provider.lookupAddress", function () {
-        return provider.lookupAddress("mxw1qj75krmwsug5le85quhxjmy4pjj2uh9mmyaqdv").then((name) => {
+        return provider.lookupAddress("mxw1jmyd57jkjt0n63uzgwed290qv0fmwwdxr5w9jk").then((name) => {
             console.log(indent, "Lookup Address:", name ? name : "<EMPTY>");
         });
     });
