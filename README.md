@@ -53,7 +53,7 @@ You can find detailed usage examples in the `examples` folder.
 - Utilities / [`examples/util.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/util.js)
 
 ## API reference / Features
-MXW SDK module
+**>MXW SDK module**
 
 **Kind**: global namespace  
 **Version**: 0.1.1  
@@ -94,7 +94,7 @@ MXW SDK module
 <a name="mxw.events"></a>
 
 ### mxw.events : <code>object</code>
-Events
+**>Events**
 
 **Kind**: static namespace of [<code>mxw</code>](#mxw)  
 **Example**: [`examples/events.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/events.js)
@@ -140,7 +140,7 @@ Removes a certain handler
 <a name="mxw.main"></a>
 
 ### mxw.main : <code>object</code>
-Main
+**>Main**
 
 **Kind**: static namespace of [<code>mxw</code>](#mxw)  
 **Example**: [`examples/transfer.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/transfer.js)
@@ -193,7 +193,7 @@ Signs a transfer transaction without relaying it.
 <a name="mxw.util"></a>
 
 ### mxw.util : <code>object</code>
-Utilities
+**>Utilities**
 
 **Kind**: static namespace of [<code>mxw</code>](#mxw)  
 **Example**: [`examples/util.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/util.js)
@@ -328,7 +328,7 @@ Get transactions by wallet address.
 <a name="mxw.alias"></a>
 
 ### mxw.alias : <code>object</code>
-Aliasing module
+**>Aliasing module**
 
 **Kind**: static namespace of [<code>mxw</code>](#mxw)  
 **Example**: [`examples/alias.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/alias.js)
@@ -392,7 +392,7 @@ Gets the address of an alias
 <a name="mxw.kyc"></a>
 
 ### mxw.kyc : <code>object</code>
-KYC module
+**>KYC module**
 
 **Kind**: static namespace of [<code>mxw</code>](#mxw)  
 **Example**: [`examples/kyc.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/kyc.js)
@@ -429,7 +429,7 @@ Checks if the wallet address is whitelisted.
 <a name="mxw.faucet"></a>
 
 ### mxw.faucet : <code>object</code>
-Faucet module
+**>Faucet module**
 
 **Kind**: static namespace of [<code>mxw</code>](#mxw)  
 **Example**: [`examples/faucet.js`](https://github.com/Sentrylink/mxw-api/blob/master/examples/faucet.js)
